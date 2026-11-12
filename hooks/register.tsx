@@ -461,7 +461,9 @@ async function openWeb($: $): Promise<string> {
     const url = await startWeb($)
     const file = await read($, fileAtom)
     const full = file ? `${url}#${encodeURIComponent(file.path)}` : url
-    await $.process.run(['xdg-open', full]).catch(() => undefined)
+    // xdg-open sous Linux, open sous macOS ; l'URL passe en argument, jamais dans le script
+    const opener = 'if command -v xdg-open >/dev/null 2>&1; then exec xdg-open "$1"; else exec open "$1"; fi'
+    await $.process.run(['sh', '-c', opener, 'sh', full]).catch(() => undefined)
     return full
   } catch (err) {
     await update($, noticeAtom, () => `⚠️ Serveur web : ${String((err as Error)?.message ?? err)}`)

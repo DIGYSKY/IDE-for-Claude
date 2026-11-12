@@ -58,7 +58,7 @@ Sur macOS, `Cmd` marche à la place de `Ctrl`.
 - Claude Code avec les mods (hooks modules)
 - Node.js 18 ou plus récent pour le mode navigateur
 - Internet pour charger Monaco depuis le CDN jsDelivr
-- `xdg-open` (Linux) pour ouvrir le navigateur automatiquement. Ailleurs, notamment sur macOS, copier l'adresse affichée par `/ide-for-claude-web`
+- `xdg-open` (Linux) ou `open` (macOS) pour ouvrir le navigateur automatiquement. Ailleurs, copier l'adresse affichée par `/ide-for-claude-web`
 
 ## Installation
 
