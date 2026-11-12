@@ -328,6 +328,9 @@
   #question .opt small { display: block; color: var(--muted); font-size: .85em; }
   #question .opt pre { margin: 4px 0 0; font-size: .8em; white-space: pre-wrap; color: var(--muted); }
   #question .other { margin-top: 4px; }
+  #question .otherRow { align-items: center; cursor: text; }
+  #question .otherRow .omark { cursor: pointer; }
+  #question .otherRow .other { margin: 0; flex: 1; min-width: 0; font-size: 1em; }
   #question .qa { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
   .convEmpty { color: var(--muted); text-align: center; padding: 40px 20px; }
   /* tableau de bord Claude Status */
@@ -2445,28 +2448,43 @@ function renderQuestion() {
   }
   const parts = q0.map((q, i) => {
     question.picks[i] = question.picks[i] || new Set()
+    const mark = (on) => q.multiSelect ? (on ? '☑' : '☐') : (on ? '◉' : '○')
+    const btns = []
+    // repeint les cases sans tout reconstruire (le champ « Autre » garde le focus)
+    const paint = () => {
+      btns.forEach(([b, o]) => { const on = question.picks[i].has(o.label); b.classList.toggle('on', on); b.firstChild.textContent = mark(on) })
+      if (otherRow) { const on = !!(question.other[i] || '').trim(); otherRow.classList.toggle('on', on); otherMark.textContent = mark(on) }
+      refresh()
+    }
     const opts = (q.options || []).map((o) => {
       const on = question.picks[i].has(o.label)
       const b = h('button', { class: 'opt' + (on ? ' on' : '') },
-        h('span', {}, q.multiSelect ? (on ? '☑' : '☐') : (on ? '◉' : '○')),
+        h('span', {}, mark(on)),
         h('span', {}, o.label, o.description ? h('small', {}, o.description) : null, o.preview ? h('pre', {}, o.preview) : null))
       b.onclick = () => {
         const set = question.picks[i]
         if (q.multiSelect) set.has(o.label) ? set.delete(o.label) : set.add(o.label)
-        else { set.clear(); set.add(o.label); question.other[i] = '' }
+        else { set.clear(); set.add(o.label); question.other[i] = ''; other.value = '' }
         // une seule question à choix unique : un clic suffit
         if (!q.multiSelect && q0.length === 1) return answerQuestion()
-        renderQuestion()
+        paint()
       }
+      btns.push([b, o])
       return b
     })
-    const other = h('input', { type: 'text', class: 'other', placeholder: q.kind === 'number' ? 'Un nombre…' : opts.length ? 'Autre réponse (facultatif)…' : (q.placeholder || 'Ta réponse…') })
+    const other = h('input', { type: 'text', class: 'other', placeholder: q.kind === 'number' ? 'Un nombre…' : opts.length ? 'Autre réponse : écris la tienne…' : (q.placeholder || 'Ta réponse…') })
     other.value = question.other[i] || ''
-    other.oninput = () => { question.other[i] = other.value; if (!q.multiSelect && other.value.trim()) question.picks[i].clear(); refresh() }
+    other.oninput = () => { question.other[i] = other.value; if (!q.multiSelect && other.value.trim()) question.picks[i].clear(); paint() }
     other.onkeydown = (e) => { if (e.key === 'Enter' && !send.disabled) { e.preventDefault(); answerQuestion() } }
+    // avec des choix proposés, « Autre » est une case comme les autres : cochée dès qu'on écrit
+    const otherMark = h('span', { class: 'omark', title: 'Cochée quand tu écris ta propre réponse ; clic pour l\'effacer' }, '')
+    otherMark.onclick = () => { if ((question.other[i] || '').trim()) { question.other[i] = ''; other.value = ''; paint() } other.focus() }
+    const otherRow = opts.length ? h('div', { class: 'opt otherRow' }, otherMark, other) : null
+    if (otherRow) otherRow.onclick = (e) => { if (e.target === otherRow) other.focus() }
+    paint()
     return h('div', { class: 'qq' },
       h('b', {}, q.header ? h('span', { class: 'chip' }, q.header) : null, q.question, q.multiSelect ? h('small', { class: 'hint' }, ' (plusieurs choix possibles)') : null),
-      h('div', { class: 'opts' }, ...opts), other)
+      h('div', { class: 'opts' }, ...opts, otherRow || other))
   })
   send.onclick = () => answerQuestion()
   box.replaceChildren(
