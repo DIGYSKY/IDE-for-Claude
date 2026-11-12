@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Change, HistFile, Mode, OpenFile, ReviewItem, Turn } from '../types'
+import type { Annotation, Change, HistFile, Idea, Mode, OpenFile, PlanItem, Project, Queued, ReviewItem, SavedCommand, Status, Turn } from '../types'
 import { cutToks, langOf, start, tokenize } from './syntax'
 import type { Kind, Tok } from './syntax'
 
@@ -24,6 +24,12 @@ const webAtom = atom({ plugin: 'ide-for-claude', key: 'web' } as const, null as 
 /** la personne a fermé le panneau : il ne se rouvre plus tout seul avant un /ide-for-claude */
 /** l'id de session dont l'historique est en mémoire (relu de son fichier s'il y en avait un) */
 const restoredForAtom = atom({ plugin: 'ide-for-claude', key: 'restoredFor' } as const, null as string | null, { shape: 'restoredFor-1' })
+const projectAtom = atom({ plugin: 'ide-for-claude', key: 'project' } as const, null as Project | null, { shape: 'project-1' })
+const queueAtom = atom({ plugin: 'ide-for-claude', key: 'queue' } as const, [] as Queued[], { shape: 'queue-1' })
+const planAtom = atom({ plugin: 'ide-for-claude', key: 'plan' } as const, [] as PlanItem[], { shape: 'plan-1' })
+/** Claude travaille sur un prompt : les prompts envoyés depuis la page attendent dans la file */
+const busyAtom = atom({ plugin: 'ide-for-claude', key: 'busy' } as const, false, { shape: 'busy-1' })
+const statusAtom = atom({ plugin: 'ide-for-claude', key: 'status' } as const, null as Status | null, { shape: 'status-1' })
 const paneClosedAtom = atom({ plugin: 'ide-for-claude', key: 'paneClosed' } as const, false, { shape: 'paneClosed-1' })
 
 const historyAtom = atom({ plugin: 'ide-for-claude', key: 'history' } as const, [] as Turn[], { shape: 'history-1' })
@@ -189,7 +195,8 @@ async function recordChange($: $, path: string, prior: string | null, after: str
   if (file?.path === path && !isDirty) await update($, fileAtom, () => ({ path, saved: after, draft: after }))
   else if (file?.path === path) await update($, noticeAtom, () => '⚠️ Claude a modifié ce fichier pendant que tu l’éditais')
   else if (!isDirty) await openFile($, path)
-  if (!(await read($, webAtom)) && !(await read($, paneClosedAtom))) void $.ui.open({ id: PANE, title: TITLE })
+  if (!(await read($, webAtom)) && !(await read($, paneClosedAtom)) && (await ideSettings($)).autoOpenPane)
+    void $.ui.open({ id: PANE, title: TITLE })
 }
 
 async function track<R>($: $, path: string, who: Who, run: () => Promise<R>): Promise<R> {
@@ -437,6 +444,7 @@ async function reviewBlock($: $): Promise<string | null> {
     if (it.kind === 'reject')
       return `${i + 1}. ${where} : BLOC REJETÉ. L'utilisateur a remis le code d'avant.${it.code ? `\n   Ton code rejeté :\n${fence(it.code)}` : ''}${it.text ? `\n   Commentaire : ${it.text}` : ''}`
     if (it.kind === 'restore') return `${i + 1}. ${it.text}`
+    if (it.kind === 'idea') return `${i + 1}. ${it.text}`
     if (it.kind === 'tests') return `${i + 1}. ${it.text}${it.code ? `\n${fence(it.code)}` : ''}`
     if (it.kind === 'snippet')
       return `${i + 1}. ${where} : extrait de code partagé par l'utilisateur :\n${fence(it.code ?? '')}${it.text ? `\n   Note : ${it.text}` : ''}`
@@ -454,16 +462,28 @@ async function reviewBlock($: $): Promise<string | null> {
 // chaque session a donc son fichier, ~/.claude/plugins/data/ide-for-claude/sessions/<id>.json.
 // `claude --resume` retrouve le même id (le nom de la transcription) et donc le même historique.
 const KEEP_DAYS = 30
-type Saved = { v: 1; cwd: string; savedAt: number; history: Turn[]; changes: Change[]; review: ReviewItem[]; accepted: string[] }
+type Saved = {
+  v: 1
+  cwd: string
+  savedAt: number
+  history: Turn[]
+  changes: Change[]
+  review: ReviewItem[]
+  accepted: string[]
+  queue?: Queued[]
+  plan?: PlanItem[]
+}
 
-let sessionsDir: string | null = null
-async function dataDir($: $) {
-  if (sessionsDir) return sessionsDir
+let base: string | null = null
+/** ~/.claude/plugins/data/ide-for-claude (ou sous CLAUDE_CONFIG_DIR) */
+async function baseDir($: $) {
+  if (base) return base
   const config =
     (await $.env.get('CLAUDE_CONFIG_DIR')) || `${(await $.env.get('HOME')) || (await $.env.get('USERPROFILE')) || ''}/.claude`
-  sessionsDir = `${config}/plugins/data/ide-for-claude/sessions`
-  return sessionsDir
+  base = `${config}/plugins/data/ide-for-claude`
+  return base
 }
+const dataDir = async ($: $) => `${await baseDir($)}/sessions`
 
 async function sessionFileOf($: $, id: string) {
   return id && /^[\w.-]+$/.test(id) ? `${await dataDir($)}/${id}.json` : null
@@ -500,6 +520,8 @@ async function ensureRestored($: $): Promise<string | null> {
     await update($, changesAtom, mine => [...savedChanges.filter(c => !mine.some(m => m.path === c.path)), ...mine])
     await update($, reviewAtom, mine => [...(data.review ?? []).filter(r => !mine.some(m => m.id === r.id)), ...mine])
     await update($, acceptedAtom, mine => [...new Set([...(data.accepted ?? []), ...mine])])
+    if (Array.isArray(data.queue)) await update($, queueAtom, mine => [...data.queue!.filter(q => !mine.some(m => m.id === q.id)), ...mine])
+    if (Array.isArray(data.plan)) await update($, planAtom, mine => (mine.length ? mine : data.plan!))
   }
   await update($, restoredForAtom, () => id)
   return id
@@ -516,8 +538,19 @@ async function persist($: $, id?: string) {
     const changes = await read($, changesAtom)
     const review = await read($, reviewAtom)
     // une session sans aucune modif ne laisse pas de fichier ; une revue vidée met le sien à jour
-    if (!history.length && !changes.length && !review.length && !(await $.fs.exists(file))) return
-    const data: Saved = { v: 1, cwd: await $.session.cwd(), savedAt: Date.now(), history, changes, review, accepted: await read($, acceptedAtom) }
+    const queued = (await read($, queueAtom)).length
+    if (!history.length && !changes.length && !review.length && !queued && !(await $.fs.exists(file))) return
+    const data: Saved = {
+      v: 1,
+      cwd: await $.session.cwd(),
+      savedAt: Date.now(),
+      history,
+      changes,
+      review,
+      accepted: await read($, acceptedAtom),
+      queue: await read($, queueAtom),
+      plan: await read($, planAtom),
+    }
     await $.fs.write(file, JSON.stringify(data))
   } catch {
     // disque plein, dossier refusé... l'historique reste en mémoire pour la session
@@ -532,6 +565,9 @@ async function endSession($: $, sessionId: string, reason: string) {
   await update($, changesAtom, () => [])
   await update($, reviewAtom, () => [])
   await update($, acceptedAtom, () => [])
+  await update($, queueAtom, () => [])
+  await update($, planAtom, () => [])
+  await update($, busyAtom, () => false)
   await update($, restoredForAtom, () => null)
   void pushChanges($).catch(() => undefined)
 }
@@ -539,12 +575,361 @@ async function endSession($: $, sessionId: string, reason: string) {
 /** Les historiques de plus de 30 jours sont effacés. */
 async function pruneSessions($: $) {
   const dir = await dataDir($)
-  const old = Date.now() - KEEP_DAYS * 24 * 3600_000
+  const old = Date.now() - ((await ideSettings($)).historyDays || KEEP_DAYS) * 24 * 3600_000
   for (const x of await $.fs.list(dir).catch(() => [])) {
     if (x.kind === 'file' && x.name.endsWith('.json') && x.mtimeMs < old)
       await $.process.run(['rm', '-f', '--', `${dir}/${x.name}`]).catch(() => undefined)
   }
 }
+
+// ---------- par projet : idées, annotations, commandes, prompts envoyés ----------
+// Un fichier par projet, ~/.claude/plugins/data/ide-for-claude/projects/<dossier>-<empreinte>.json
+const MAX_PROMPTS = 100
+const djb2 = (text: string) => {
+  let x = 5381
+  for (let i = 0; i < text.length; i++) x = ((x << 5) + x + text.charCodeAt(i)) | 0
+  return (x >>> 0).toString(36)
+}
+const emptyProject = (cwd: string): Project => ({ cwd, ideas: [], annotations: [], commands: [], prompts: [], nextIdea: 1 })
+const arr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
+
+async function projectFile($: $, cwd: string) {
+  const name = (cwd.split(/[\\/]/).filter(Boolean).pop() || 'racine').replace(/[^\w.-]/g, '_')
+  return `${await baseDir($)}/projects/${name}-${djb2(cwd)}.json`
+}
+
+/** Le projet de la session, relu de son fichier au premier usage (ou quand le dossier change). */
+async function getProject($: $): Promise<Project> {
+  const cwd = await $.session.cwd()
+  const cur = await read($, projectAtom)
+  if (cur && cur.cwd === cwd) return cur
+  let p = emptyProject(cwd)
+  const text = await $.fs.read(await projectFile($, cwd)).catch(() => null)
+  if (typeof text === 'string') {
+    try {
+      const d = JSON.parse(text) as Partial<Project> & { v?: number }
+      if (d.v === 1)
+        p = {
+          cwd,
+          ideas: arr<Idea>(d.ideas),
+          annotations: arr<Annotation>(d.annotations),
+          commands: arr<SavedCommand>(d.commands),
+          prompts: arr<string>(d.prompts),
+          nextIdea: Number(d.nextIdea) || 1,
+        }
+    } catch {
+      // fichier abîmé : on repart d'un projet vide, l'ancien reste sur le disque jusqu'à la prochaine écriture
+    }
+  }
+  await update($, projectAtom, () => p)
+  return p
+}
+
+/** Modifie le projet (sans perdre une modif concurrente), l'écrit et prévient la page. */
+async function changeProject($: $, fn: (p: Project) => Project): Promise<Project> {
+  const loaded = await getProject($)
+  await update($, projectAtom, p => fn(p && p.cwd === loaded.cwd ? p : loaded))
+  const p = (await read($, projectAtom))!
+  await $.fs.write(await projectFile($, p.cwd), JSON.stringify({ v: 1, ...p })).catch(() => undefined)
+  void pushChanges($).catch(() => undefined)
+  return p
+}
+
+async function addIdea($: $, idea: Omit<Idea, 'id' | 'n' | 'at' | 'status'>): Promise<Idea> {
+  let made: Idea | null = null
+  await changeProject($, p => {
+    made = { ...idea, id: newId(), n: p.nextIdea, at: Date.now(), status: 'new' }
+    return { ...p, ideas: [...p.ideas, made], nextIdea: p.nextIdea + 1 }
+  })
+  return made!
+}
+
+const ideaText = (cwd: string, i: Idea) => {
+  const where = i.path ? ` (${relTo(cwd, i.path)}${i.line ? `:${i.line}${i.endLine && i.endLine !== i.line ? `-${i.endLine}` : ''}` : ''})` : ''
+  return `Idée #i${i.n} de la boîte à idées${where} : ${i.text}${i.tags.length ? ` [${i.tags.join(', ')}]` : ''}${i.code ? `\n${fence(i.code)}` : ''}`
+}
+
+// ---------- réglages ----------
+type IdeSettings = {
+  /** le panneau du terminal s'ouvre tout seul à la première modif de Claude */
+  autoOpenPane: boolean
+  /** la revue en attente part avec le prochain prompt */
+  attachReview: boolean
+  /** jours de conservation de l'historique des sessions */
+  historyDays: number
+  /** modèle de la barre d'état de la page */
+  statusline: string
+}
+const IDE_DEFAULTS: IdeSettings = {
+  autoOpenPane: true,
+  attachReview: true,
+  historyDays: 30,
+  statusline: '{model} · contexte {context} · {cost} · {branch}',
+}
+async function ideSettings($: $): Promise<IdeSettings> {
+  const s = (await $.store.get('ide').catch(() => undefined)) as Partial<IdeSettings> | undefined
+  return { ...IDE_DEFAULTS, ...(s && typeof s === 'object' ? s : {}) }
+}
+async function setIdeSettings($: $, patch: Partial<IdeSettings>) {
+  const next = { ...(await ideSettings($)), ...patch }
+  if (typeof next.historyDays !== 'number' || next.historyDays < 1) next.historyDays = IDE_DEFAULTS.historyDays
+  await $.store.set('ide', next)
+  void pushChanges($).catch(() => undefined)
+}
+/** réglages de l'éditeur, à la manière du settings.json de VS Code (`editor.fontSize`...) */
+const editorSettings = async ($: $) => ((await $.store.get('editor').catch(() => undefined)) as Record<string, unknown> | undefined) ?? {}
+
+/** settings.json de VS Code : JSON avec commentaires et virgules finales */
+function parseJsonc(text: string): unknown {
+  let out = ''
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]!
+    if (c === '"') {
+      let j = i + 1
+      while (j < text.length && text[j] !== '"') j += text[j] === '\\' ? 2 : 1
+      out += text.slice(i, j + 1)
+      i = j
+    } else if (c === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') i++
+      out += '\n'
+    } else if (c === '/' && text[i + 1] === '*') {
+      i = text.indexOf('*/', i + 2)
+      if (i < 0) break
+      i++
+    } else out += c
+  }
+  return JSON.parse(out.replace(/,(\s*[}\]])/g, '$1'))
+}
+
+async function importVSCode($: $): Promise<string> {
+  const home = (await $.env.get('HOME')) || ''
+  const appdata = (await $.env.get('APPDATA')) || ''
+  const candidates = [
+    `${home}/Library/Application Support/Code/User/settings.json`,
+    `${home}/.config/Code/User/settings.json`,
+    appdata ? `${appdata}/Code/User/settings.json` : '',
+    `${home}/Library/Application Support/Cursor/User/settings.json`,
+    `${home}/.config/Cursor/User/settings.json`,
+  ].filter(Boolean)
+  for (const file of candidates) {
+    const text = await $.fs.read(file).catch(() => null)
+    if (typeof text !== 'string') continue
+    let parsed: unknown
+    try {
+      parsed = parseJsonc(text)
+    } catch {
+      return `⚠️ ${file} n'est pas un JSON lisible`
+    }
+    const picked: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>))
+      if (k.startsWith('editor.') || k === 'workbench.colorTheme' || k === 'files.trimTrailingWhitespace') picked[k] = v
+    await $.store.set('editor', { ...(await editorSettings($)), ...picked })
+    void pushChanges($).catch(() => undefined)
+    return `✅ ${Object.keys(picked).length} réglages importés de ${file.replace(home, '~')}`
+  }
+  return '⚠️ Aucun settings.json de VS Code trouvé'
+}
+
+/** les settings.json de Claude Code, par portée */
+async function settingsFiles($: $) {
+  const config =
+    (await $.env.get('CLAUDE_CONFIG_DIR')) || `${(await $.env.get('HOME')) || (await $.env.get('USERPROFILE')) || ''}/.claude`
+  const cwd = await $.session.cwd()
+  return {
+    user: `${config}/settings.json`,
+    project: `${cwd}/.claude/settings.json`,
+    local: `${cwd}/.claude/settings.local.json`,
+  } as Record<string, string>
+}
+
+async function sendConfig($: $) {
+  const rows = await $.config.list().catch(() => [])
+  const files: Record<string, { path: string; text: string | null }> = {}
+  for (const [scope, path] of Object.entries(await settingsFiles($))) {
+    const text = await $.fs.read(path).catch(() => null)
+    files[scope] = { path, text: typeof text === 'string' ? text : null }
+  }
+  await notify($, { type: 'config', rows, files })
+}
+
+// ---------- barre d'état : modèle, contexte, coût, branche ----------
+let statusAt = 0
+async function refreshStatus($: $, force = false) {
+  if (!force && Date.now() - statusAt < 1500) return
+  statusAt = Date.now()
+  try {
+    const usage = await $.session.usage().catch(() => null)
+    const model = await $.session.model().catch(() => undefined)
+    const cwd = await $.session.cwd()
+    const head = await $.process.run(['git', '-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD'], { timeoutMs: 5000 }).catch(() => null)
+    const status: Status & { branch?: string } = {
+      model,
+      tokens: usage?.context.tokens,
+      window: usage?.context.window,
+      percent: usage?.context.percent,
+      usd: usage?.cost?.usd,
+      at: Date.now(),
+      ...(head && head.exitCode === 0 ? { branch: head.stdout.trim() } : {}),
+    }
+    await update($, statusAtom, () => status)
+    await notify($, { type: 'status', status })
+  } catch {
+    // la barre d'état n'est qu'un confort
+  }
+}
+
+// ---------- commandes de Claude Code (/ et skills), pour l'autocomplétion ----------
+let commandsCache: { at: number; list: { name: string; description: string; source: string }[] } | null = null
+async function slashCommands($: $) {
+  if (commandsCache && Date.now() - commandsCache.at < 60_000) return commandsCache.list
+  const list = (await $.command.list().catch(() => [])).map(c => ({ name: c.name, description: c.description, source: c.source }))
+  commandsCache = { at: Date.now(), list }
+  return list
+}
+
+// ---------- envoyer un prompt depuis la page : mentions, file d'attente ----------
+const MAX_INLINE = 30_000
+
+/** @fichier, @fichier:12-30, #i3 et /skill deviennent du contexte joint au prompt. */
+async function expandMentions($: $, raw: string) {
+  const cwd = await $.session.cwd()
+  const context: string[] = []
+  const usedIdeas: string[] = []
+  const seen = new Set<string>()
+  for (const m of raw.matchAll(/(^|\s)@([^\s:]+)(?::(\d+)(?:-(\d+))?)?/g)) {
+    const path = absOf(cwd, m[2]!)
+    const key = m[0].trim()
+    if (seen.has(key)) continue
+    seen.add(key)
+    const text = await readText($, path).catch(() => null)
+    if (text === null) continue
+    const rel = relTo(cwd, path)
+    if (m[3]) {
+      const a = Number(m[3])
+      const b = Math.max(a, Number(m[4] ?? m[3]))
+      const lines = text.split('\n').slice(a - 1, b).join('\n')
+      context.push(`${rel}, ligne${b > a ? `s ${a}-${b}` : ` ${a}`} (mentionné par l'utilisateur) :\n${fence(lines)}`)
+    } else if (text.length <= MAX_INLINE) context.push(`Contenu de ${rel} (mentionné par l'utilisateur) :\n${fence(text)}`)
+    else context.push(`Fichier mentionné par l'utilisateur : ${rel} (trop gros pour être joint, lis-le si besoin)`)
+  }
+  const project = await getProject($)
+  for (const m of raw.matchAll(/(^|\s)#i(\d+)\b/g)) {
+    const idea = project.ideas.find(i => i.n === Number(m[2]))
+    if (!idea || usedIdeas.includes(idea.id)) continue
+    usedIdeas.push(idea.id)
+    context.push(ideaText(cwd, idea))
+  }
+  const commands = await slashCommands($)
+  for (const m of raw.matchAll(/(^|\s)\/([\w:.-]+)/g)) {
+    if (m.index === 0 && raw.trimStart().startsWith('/')) continue
+    const c = commands.find(x => x.name === m[2])
+    if (c) context.push(`L'utilisateur mentionne /${c.name} (${c.description}). Sers-t'en si c'est pertinent.`)
+  }
+  return { context, usedIdeas }
+}
+
+async function submitPrompt($: $, raw: string) {
+  const text = raw.trim()
+  if (!text) return
+  await changeProject($, p => ({ ...p, prompts: [...p.prompts.filter(x => x !== text), text].slice(-MAX_PROMPTS) }))
+  // « /commande arguments » en tête : c'est une commande, comme tapée dans le terminal
+  const lead = text.match(/^\/([\w:.-]+)(?:\s+([\s\S]*))?$/)
+  if (lead && (await slashCommands($)).some(c => c.name === lead[1])) {
+    void $.command.run({ command: lead[1]!, args: lead[2] ?? '' }).catch(() => undefined)
+    return
+  }
+  const { context, usedIdeas } = await expandMentions($, text)
+  if (usedIdeas.length)
+    await changeProject($, p => ({ ...p, ideas: p.ideas.map(i => (usedIdeas.includes(i.id) && i.status === 'new' ? { ...i, status: 'doing' } : i)) }))
+  // Claude Code ne passe pas un prompt envoyé par la mod dans ses propres hooks prompt.submit :
+  // on fait ici ce que ce hook fait pour un prompt tapé (nouveau tour, revue jointe)...
+  await ensureRestored($).catch(() => null)
+  await update($, changesAtom, list => list.map(c => ({ ...c, stale: true })))
+  await newTurn($, text)
+  await update($, busyAtom, () => true)
+  const block = (await ideSettings($)).attachReview ? await reviewBlock($) : null
+  if (block) {
+    await update($, reviewAtom, () => [])
+    context.push(block)
+  }
+  void pushChanges($).catch(() => undefined)
+  void persist($)
+  // ... et comme $.prompt.submit ne prend pas de contexte à part, il suit le texte
+  const full = context.length ? `${text}\n\n---\nJoint depuis IDE for Claude :\n\n${context.join('\n\n')}` : text
+  void $.prompt.submit({ text: full, asUser: true }).catch(() => undefined)
+}
+
+/** Claude a fini : le prompt suivant de la file part. */
+async function drainQueue($: $) {
+  const queue = await read($, queueAtom)
+  if (!queue.length || (await read($, busyAtom))) return
+  const [first, ...rest] = queue
+  await update($, queueAtom, () => rest)
+  await submitPrompt($, first!.text)
+  void pushChanges($).catch(() => undefined)
+}
+
+// ---------- outils que Claude peut appeler ----------
+const TOOL_PREFIX = 'mcp__ide-for-claude__'
+const toolText = (text: string, isError = false) => ({ result: { content: [{ type: 'text', text }], isError } })
+const TOOLS = [
+  {
+    name: 'idea_add',
+    description:
+      "Note une idée dans la boîte à idées d'IDE for Claude (l'IDE web de l'utilisateur), gardée par projet. À utiliser quand l'utilisateur te demande de noter une idée, ou quand tu remarques une amélioration, un bug ou une piste à traiter plus tard, plutôt que de la laisser se perdre dans la conversation. Tu peux la rattacher à un fichier et des lignes.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: "L'idée, en une ou deux phrases" },
+        tags: { type: 'array', items: { type: 'string' }, description: 'Étiquettes courtes (facultatif)' },
+        file: { type: 'string', description: 'Fichier concerné, chemin relatif au projet (facultatif)' },
+        line: { type: 'integer', description: 'Première ligne concernée (facultatif)' },
+        endLine: { type: 'integer', description: 'Dernière ligne concernée (facultatif)' },
+      },
+      required: ['text'],
+    },
+  },
+  {
+    name: 'annotate',
+    description:
+      "Pose une annotation dans le code, visible par l'utilisateur dans IDE for Claude : une liste où un clic ouvre le fichier sur la ligne. À utiliser quand l'utilisateur demande où se trouve quelque chose (« où est géré X ? »), pour lui montrer des endroits précis du code, ou pour baliser ce qu'il doit relire. Une annotation par endroit, avec une note courte qui dit ce qu'on y trouve.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', description: 'Chemin du fichier, relatif au projet' },
+        line: { type: 'integer', description: 'Ligne (à partir de 1)' },
+        endLine: { type: 'integer', description: 'Dernière ligne si plusieurs (facultatif)' },
+        note: { type: 'string', description: 'Ce qu’on trouve à cet endroit, en une phrase' },
+      },
+      required: ['file', 'line', 'note'],
+    },
+  },
+  {
+    name: 'annotations_clear',
+    description: "Retire les annotations posées dans IDE for Claude : toutes, ou seulement celles d'un fichier.",
+    inputSchema: { type: 'object', properties: { file: { type: 'string', description: 'Seulement ce fichier (facultatif)' } } },
+  },
+  {
+    name: 'command_save',
+    description:
+      "Enregistre une commande dans l'exécuteur de commandes d'IDE for Claude, pour que l'utilisateur la lance d'un clic depuis la page (lancer le projet, un serveur de dev, les tests, un build...). Ne lance pas la commande. Un nom déjà pris est remplacé.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Nom court et parlant, par exemple « Serveur de dev »' },
+        command: { type: 'string', description: 'La commande shell, lancée à la racine du projet' },
+        description: { type: 'string', description: 'À quoi elle sert (facultatif)' },
+      },
+      required: ['name', 'command'],
+    },
+  },
+  {
+    name: 'statusline_set',
+    description:
+      "Change le modèle de la barre d'état de la page IDE for Claude, quand l'utilisateur le demande. Variables : {model} {context} (pourcentage) {tokens} {window} {cost} {branch} {plan} (étape en cours) {queue} (prompts en attente) {review} (fichiers en revue) {time}.",
+    inputSchema: { type: 'object', properties: { template: { type: 'string' } }, required: ['template'] },
+  },
+] as const
 
 // ---------- préférences du panneau terminal, pour toutes les sessions ----------
 const PANE_PREFS = 'pane'
@@ -605,6 +990,14 @@ async function pushChanges($: $) {
     review: await read($, reviewAtom),
     accepted: await read($, acceptedAtom),
     prefs: (await $.store.get(prefsKey(cwd))) ?? null,
+    project: await getProject($).catch(() => null),
+    queue: await read($, queueAtom),
+    plan: await read($, planAtom),
+    busy: await read($, busyAtom),
+    status: await read($, statusAtom),
+    ide: await ideSettings($),
+    editor: await editorSettings($),
+    commands: await slashCommands($),
   })
 }
 
@@ -627,6 +1020,15 @@ type WebEvent = {
   file?: boolean
   prefs?: unknown
   startLine?: number
+  tags?: unknown
+  status?: string
+  name?: string
+  command?: string
+  description?: string
+  settings?: unknown
+  key?: string
+  value?: unknown
+  scope?: string
 }
 
 async function onWebEvent($: $, ev: WebEvent) {
@@ -676,11 +1078,16 @@ async function onWebEvent($: $, ev: WebEvent) {
       await notify($, { type: 'toast', text: `✅ ${relTo(cwd, ev.path)} validé : revue close pour ce prompt` })
       break
     case 'sendReview': {
-      const block = await reviewBlock($)
-      if (!block) break
-      await update($, reviewAtom, () => [])
-      await $.prompt.submit({ text: block })
-      await notify($, { type: 'toast', text: '📨 Review envoyée à Claude' })
+      if (!(await read($, reviewAtom)).length) break
+      // comme un prompt de la page : la revue en attente y est jointe ; en file si Claude travaille
+      const text = 'Voici ma review de tes modifications.'
+      if (await read($, busyAtom)) {
+        await update($, queueAtom, q => [...q, { id: newId(), text, at: Date.now() }])
+        await notify($, { type: 'toast', text: '⏳ Review en file d’attente : elle partira quand Claude aura fini' })
+      } else {
+        await submitPrompt($, text)
+        await notify($, { type: 'toast', text: '📨 Review envoyée à Claude' })
+      }
       break
     }
     case 'restore':
@@ -695,8 +1102,137 @@ async function onWebEvent($: $, ev: WebEvent) {
     case 'tests':
       // la sortie d'un lancement de tests, jointe depuis la page
       await addReview($, { kind: 'tests', text: ev.text ?? 'Résultat des tests', code: ev.code })
-      await notify($, { type: 'toast', text: '🧪 Résultat des tests ajouté : il partira avec ton prochain prompt' })
+      await notify($, { type: 'toast', text: '📎 Sortie de la commande ajoutée : elle partira avec ton prochain prompt' })
       break
+    // --- éditeur de prompt ---
+    case 'prompt.send':
+      if (!ev.text?.trim()) return
+      if (await read($, busyAtom)) {
+        await update($, queueAtom, q => [...q, { id: newId(), text: ev.text!.trim(), at: Date.now() }])
+        await notify($, { type: 'toast', text: `⏳ En file d'attente : il partira quand Claude aura fini` })
+      } else await submitPrompt($, ev.text)
+      break
+    case 'queue.remove':
+      await update($, queueAtom, q => q.filter(x => x.id !== ev.id))
+      break
+    case 'queue.now': {
+      // envoyer tout de suite : Claude Code le prendra dès qu'il sera libre
+      const item = (await read($, queueAtom)).find(x => x.id === ev.id)
+      if (!item) break
+      await update($, queueAtom, q => q.filter(x => x.id !== ev.id))
+      await submitPrompt($, item.text)
+      break
+    }
+    case 'busy.reset':
+      // si Claude a été interrompu sans fin de tour, la file ne doit pas rester bloquée
+      await update($, busyAtom, () => false)
+      await drainQueue($)
+      break
+    // --- boîte à idées ---
+    case 'idea.add':
+      if (!ev.text?.trim()) break
+      {
+        const idea = await addIdea($, {
+          text: ev.text.trim(),
+          tags: Array.isArray(ev.tags) ? ev.tags.filter((t): t is string => typeof t === 'string' && !!t.trim()) : [],
+          by: 'user',
+          ...(ev.path ? { path: ev.path, line: ev.line, endLine: ev.endLine, code: ev.code } : {}),
+        })
+        await notify($, { type: 'toast', text: `💡 Idée #i${idea.n} ajoutée` })
+      }
+      break
+    case 'idea.update':
+      await changeProject($, p => ({
+        ...p,
+        ideas: p.ideas.map(i =>
+          i.id !== ev.id
+            ? i
+            : {
+                ...i,
+                ...(typeof ev.text === 'string' && ev.text.trim() ? { text: ev.text.trim() } : {}),
+                ...(Array.isArray(ev.tags) ? { tags: ev.tags.filter((t): t is string => typeof t === 'string' && !!t.trim()) } : {}),
+                ...(ev.status === 'new' || ev.status === 'doing' || ev.status === 'done' ? { status: ev.status } : {}),
+              },
+        ),
+      }))
+      break
+    case 'idea.delete':
+      await changeProject($, p => ({ ...p, ideas: p.ideas.filter(i => i.id !== ev.id) }))
+      break
+    case 'idea.attach': {
+      const idea = (await getProject($)).ideas.find(i => i.id === ev.id)
+      if (!idea) break
+      await addReview($, { kind: 'idea', text: ideaText(cwd, idea), path: idea.path, line: idea.line, endLine: idea.endLine })
+      await changeProject($, p => ({ ...p, ideas: p.ideas.map(i => (i.id === idea.id && i.status === 'new' ? { ...i, status: 'doing' } : i)) }))
+      await notify($, { type: 'toast', text: `📎 Idée #i${idea.n} jointe : elle partira avec ton prochain prompt` })
+      break
+    }
+    // --- annotations ---
+    case 'annotation.delete':
+      await changeProject($, p => ({ ...p, annotations: p.annotations.filter(a => a.id !== ev.id) }))
+      break
+    case 'annotation.clear':
+      await changeProject($, p => ({ ...p, annotations: [] }))
+      break
+    // --- commandes enregistrées ---
+    case 'command.save': {
+      const name = ev.name?.trim()
+      const command = ev.command?.trim()
+      if (!name || !command) break
+      await changeProject($, p => {
+        const old = p.commands.find(c => c.id === ev.id || c.name === name)
+        const saved: SavedCommand = { id: old?.id ?? newId(), name, command, description: ev.description?.trim() || undefined, by: 'user', at: Date.now() }
+        return { ...p, commands: old ? p.commands.map(c => (c.id === old.id ? saved : c)) : [...p.commands, saved] }
+      })
+      await notify($, { type: 'toast', text: `💾 Commande « ${name} » enregistrée` })
+      break
+    }
+    case 'command.delete':
+      await changeProject($, p => ({ ...p, commands: p.commands.filter(c => c.id !== ev.id) }))
+      break
+    // --- réglages ---
+    case 'ide.set':
+      if (ev.settings && typeof ev.settings === 'object') await setIdeSettings($, ev.settings as Partial<IdeSettings>)
+      break
+    case 'editor.set':
+      if (ev.settings && typeof ev.settings === 'object') await $.store.set('editor', ev.settings)
+      break
+    case 'editor.importVSCode':
+      await notify($, { type: 'toast', text: await importVSCode($) })
+      break
+    case 'config.load':
+      await sendConfig($)
+      return
+    case 'config.set':
+      if (!ev.key) return
+      try {
+        await $.config.set({ key: ev.key, value: ev.value as never })
+        await notify($, { type: 'toast', text: `⚙️ ${ev.key} enregistré` })
+      } catch (err) {
+        await notify($, { type: 'toast', text: `⚠️ ${ev.key} : ${String((err as Error)?.message ?? err)}` })
+      }
+      await sendConfig($)
+      return
+    case 'settings.save': {
+      const path = ev.scope ? (await settingsFiles($))[ev.scope] : undefined
+      if (!path || typeof ev.text !== 'string') return
+      try {
+        JSON.parse(ev.text)
+      } catch (err) {
+        await notify($, { type: 'toast', text: `⚠️ JSON invalide : ${String((err as Error)?.message ?? err)}` })
+        return
+      }
+      // copie de sécurité de la version d'avant, à côté du fichier
+      const old = await $.fs.read(path).catch(() => null)
+      if (typeof old === 'string') await $.fs.write(`${path}.bak`, old)
+      await $.fs.write(path, ev.text)
+      await notify($, { type: 'toast', text: `💾 ${path.split('/').slice(-2).join('/')} enregistré (copie de l'ancien en .bak)` })
+      await sendConfig($)
+      return
+    }
+    case 'status.refresh':
+      await refreshStatus($, true)
+      return
     case 'prefs':
       await $.store.set(prefsKey(cwd), ev.prefs ?? null)
       return
@@ -863,6 +1399,8 @@ export const register: Register = on => {
     await ensureRestored($).catch(() => null)
     await pruneGone($).catch(() => false)
     await loadPanePrefs($).catch(() => undefined)
+    for (const t of TOOLS) await $.tool.register({ ...t, inputSchema: t.inputSchema as Record<string, unknown>, isDeferred: false }).catch(() => undefined)
+    await getProject($).catch(() => null)
     void pruneSessions($).catch(() => undefined)
     // après un rechargement de la mod, on relance le serveur sur le même port : la page ouverte se reconnecte
     if (await read($, webAtom)) void startWeb($).catch(() => undefined)
@@ -894,17 +1432,15 @@ export const register: Register = on => {
     await ensureRestored($).catch(() => null)
     await update($, changesAtom, list => list.map(c => ({ ...c, stale: true })))
     await newTurn($, e.text)
-    const block = await reviewBlock($)
+    await update($, busyAtom, () => true)
+    const block = (await ideSettings($)).attachReview ? await reviewBlock($) : null
     if (block) {
       await update($, reviewAtom, () => [])
-      void pushChanges($).catch(() => undefined)
       void notify($, { type: 'toast', text: '📨 Review jointe à ton prompt' })
-      void persist($)
-      return next({ ...e, context: [...(e.context ?? []), block] })
     }
     void pushChanges($).catch(() => undefined)
     void persist($)
-    return next(e)
+    return block ? next({ ...e, context: [...(e.context ?? []), block] }) : next(e)
   })
 
   on('tool.call', { tool: 'Edit' }, async ($, e, next) => track($, e.file_path, { agent: await agentLabel($, e.agentId) }, () => next(e)))
@@ -933,6 +1469,82 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // le plan de Claude : sa liste de tâches, en direct dans la page (celle de Claude, pas des sous-agents)
+  on('tool.call', { tool: 'TodoWrite' }, async ($, e, next) => {
+    const done = await next(e)
+    if (e.agentId === undefined && Array.isArray(e.todos)) {
+      await update($, planAtom, () => e.todos.map(t => ({ content: t.content, status: t.status, activeForm: t.activeForm })))
+      void pushChanges($).catch(() => undefined)
+    }
+    return done
+  })
+
+  on('tool.call', { tool: `${TOOL_PREFIX}idea_add` }, async ($, e) => {
+    const a = e as unknown as { text?: string; tags?: unknown; file?: string; line?: number; endLine?: number }
+    if (!a.text?.trim()) return toolText('Il manque le texte de l’idée.', true)
+    const cwd = await $.session.cwd()
+    let code: string | undefined
+    const path = a.file ? absOf(cwd, a.file) : undefined
+    if (path && a.line) {
+      const text = await readText($, path).catch(() => null)
+      if (text !== null) code = text.split('\n').slice(a.line - 1, Math.max(a.line, a.endLine ?? a.line)).join('\n')
+    }
+    const idea = await addIdea($, {
+      text: a.text.trim(),
+      tags: Array.isArray(a.tags) ? a.tags.filter((t): t is string => typeof t === 'string') : [],
+      by: 'claude',
+      ...(path ? { path, line: a.line, endLine: a.endLine, code } : {}),
+    })
+    void notify($, { type: 'toast', text: `💡 Claude a noté l'idée #i${idea.n}` })
+    return toolText(`Idée #i${idea.n} notée dans la boîte à idées du projet.`)
+  })
+
+  on('tool.call', { tool: `${TOOL_PREFIX}annotate` }, async ($, e) => {
+    const a = e as unknown as { file?: string; line?: number; endLine?: number; note?: string }
+    if (!a.file || !a.line || !a.note?.trim()) return toolText('Il faut un fichier, une ligne et une note.', true)
+    const cwd = await $.session.cwd()
+    const path = absOf(cwd, a.file)
+    if (!(await $.fs.exists(path).catch(() => false))) return toolText(`Fichier introuvable : ${a.file}`, true)
+    const ann: Annotation = { id: newId(), path, line: a.line, ...(a.endLine && a.endLine > a.line ? { endLine: a.endLine } : {}), note: a.note.trim(), at: Date.now() }
+    await changeProject($, p => ({ ...p, annotations: [...p.annotations, ann] }))
+    void notify($, { type: 'annotation', id: ann.id })
+    return toolText(`Annotation posée sur ${relTo(cwd, path)}:${a.line}. L'utilisateur la voit dans l'onglet 📍 d'IDE for Claude.`)
+  })
+
+  on('tool.call', { tool: `${TOOL_PREFIX}annotations_clear` }, async ($, e) => {
+    const a = e as unknown as { file?: string }
+    const cwd = await $.session.cwd()
+    const only = a.file ? absOf(cwd, a.file) : null
+    let n = 0
+    await changeProject($, p => {
+      const kept = p.annotations.filter(x => only !== null && x.path !== only)
+      n = p.annotations.length - kept.length
+      return { ...p, annotations: kept }
+    })
+    return toolText(`${n} annotation${n > 1 ? 's' : ''} retirée${n > 1 ? 's' : ''}.`)
+  })
+
+  on('tool.call', { tool: `${TOOL_PREFIX}command_save` }, async ($, e) => {
+    const a = e as unknown as { name?: string; command?: string; description?: string }
+    const name = a.name?.trim()
+    const command = a.command?.trim()
+    if (!name || !command) return toolText('Il faut un nom et une commande.', true)
+    await changeProject($, p => {
+      const old = p.commands.find(c => c.name === name)
+      const saved: SavedCommand = { id: old?.id ?? newId(), name, command, description: a.description?.trim() || undefined, by: 'claude', at: Date.now() }
+      return { ...p, commands: old ? p.commands.map(c => (c.id === old.id ? saved : c)) : [...p.commands, saved] }
+    })
+    void notify($, { type: 'toast', text: `💾 Claude a enregistré la commande « ${name} »` })
+    return toolText(`Commande « ${name} » enregistrée dans l'exécuteur d'IDE for Claude (onglet ▶).`)
+  })
+
+  on('tool.call', { tool: `${TOOL_PREFIX}statusline_set` }, async ($, e) => {
+    const a = e as unknown as { template?: string }
+    if (!a.template?.trim()) return toolText('Il manque le modèle.', true)
+    await setIdeSettings($, { statusline: a.template.trim() })
+    return toolText(`Barre d'état mise à jour : ${a.template.trim()}`)
+  })
+
   // activité en direct, et fin de tour pour la notification
   on('tool.call', async ($, e, next) => {
     if (!(await read($, webAtom))) return next(e)
@@ -942,14 +1554,21 @@ export const register: Register = on => {
       return await next(e)
     } finally {
       void notify($, { type: 'activity', label: null })
+      void refreshStatus($)
     }
   })
 
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
     if (e.agentId === undefined) {
+      await update($, busyAtom, () => false)
       await persist($)
-      if (await read($, webAtom)) void notify($, { type: 'done' })
+      if (await read($, webAtom)) {
+        void notify($, { type: 'done' })
+        void refreshStatus($, true)
+      }
+      // pas d'attente ici : le prompt suivant ne part qu'une fois ce tour fini
+      void drainQueue($).catch(() => undefined)
     }
     return done
   })

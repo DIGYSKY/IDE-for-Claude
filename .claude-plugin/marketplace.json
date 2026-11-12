@@ -2,11 +2,13 @@
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "digysky",
   "description": "Mods Claude Code de DIGYSKY",
-  "owner": { "name": "DIGYSKY" },
+  "owner": {
+    "name": "DIGYSKY"
+  },
   "plugins": [
     {
       "name": "ide-for-claude",
-      "description": "IDE dans un panneau : explorateur, éditeur et diff des modifications de Claude à accepter ou rejeter",
+      "description": "IDE web et terminal pour Claude Code : relire et valider ses modifs, lui écrire avec des mentions de fichiers et d'idées, boîte à idées, annotations, plan en direct, exécuteur de commandes",
       "source": "./",
       "category": "development",
       "homepage": "https://github.com/DIGYSKY/IDE-for-Claude"

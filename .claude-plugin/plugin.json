@@ -1,7 +1,7 @@
 {
   "name": "ide-for-claude",
-  "version": "0.1.6",
-  "description": "IDE dans un panneau : explorateur, éditeur et diff des modifications de Claude à accepter ou rejeter",
+  "version": "0.2.0",
+  "description": "IDE web et terminal pour Claude Code : relire et valider ses modifs, lui écrire avec des mentions de fichiers et d'idées, boîte à idées, annotations, plan en direct, exécuteur de commandes",
   "author": {
     "name": "DIGYSKY",
     "url": "https://github.com/DIGYSKY"

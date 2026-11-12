@@ -18,6 +18,8 @@
     }
   }
   * { box-sizing: border-box; }
+  /* un élément caché le reste, même quand son style lui donne un display */
+  [hidden] { display: none !important; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
     font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
   #app { display: grid; grid-template-columns: var(--side, 280px) 4px 1fr; grid-template-rows: 36px 1fr 26px; height: 100vh; }
@@ -115,14 +117,87 @@
   /* qui a modifié : sous-agent, Bash, notebook */
   .who-tag { font-size: 10px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-left: 4px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; display: inline-block; vertical-align: middle; }
-  /* tests */
-  #p-tests .row { display: flex; gap: 6px; padding: 6px 10px; }
-  #p-tests input { flex: 1; min-width: 0; font: 12px ui-monospace, monospace; }
-  #testsStatus { padding: 2px 12px 6px; font-size: 12px; }
-  #testsStatus.ok { color: var(--ok); } #testsStatus.bad { color: var(--bad); }
-  #testsOut { margin: 0 8px 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
-    font: 11px/1.45 ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; max-height: calc(100vh - 230px); overflow: auto; }
-  #testsOut:empty { display: none; }
+  /* exécuteur de commandes */
+  #p-runs .row2 { display: flex; gap: 6px; padding: 6px 10px; }
+  #p-runs input { flex: 1; min-width: 0; font: 12px ui-monospace, monospace; }
+  .cmd, .run { margin: 4px 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+  .cmd .top, .run .top { display: flex; gap: 6px; align-items: center; min-width: 0; }
+  .cmd .nm, .run .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cmd code, .run code { display: block; font: 11px ui-monospace, monospace; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .cmd .acts, .run .acts { margin-left: auto; display: flex; gap: 4px; flex: none; }
+  .cmd .acts button, .run .acts button, .idea .acts button { padding: 0 6px; font-size: 12px; }
+  .run.live { border-color: var(--accent); }
+  .st.ok { color: var(--ok); } .st.bad { color: var(--bad); } .st.live { color: var(--accent); }
+  .by { font-size: 10px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; flex: none; }
+  #saveForm { display: flex; gap: 6px; padding: 0 10px 6px; }
+  #runView { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  #runBar { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  #runBar code { color: var(--muted); font: 12px ui-monospace, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 60px; }
+  #runOut { flex: 1; margin: 0; padding: 8px 12px; overflow: auto; font: 12px/1.45 ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; }
+  /* boîte à idées */
+  .idea { margin: 4px 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+  .idea.done { opacity: .6; }
+  .idea .top { display: flex; gap: 6px; align-items: center; font-size: 11px; color: var(--muted); }
+  .idea .num { font-weight: 700; color: var(--accent); }
+  .idea .acts { margin-left: auto; display: flex; gap: 3px; }
+  .idea .txt { white-space: pre-wrap; word-break: break-word; margin-top: 3px; }
+  .idea .loc { font-size: 11px; color: var(--accent); cursor: pointer; margin-top: 2px; }
+  .idea .tags span { font-size: 10px; background: var(--sel); border-radius: 4px; padding: 0 5px; margin-right: 3px; }
+  .idea select, .set select { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; }
+  .idea select { font-size: 11px; }
+  .filters { display: flex; gap: 4px; padding: 2px 10px 6px; flex-wrap: wrap; }
+  .filters button { padding: 0 8px; font-size: 12px; }
+  #ideaFrom { display: flex; gap: 6px; padding: 2px 0; }
+  /* annotations */
+  .annf { padding: 8px 10px 2px; font-size: 11px; color: var(--muted); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ann { display: flex; gap: 8px; padding: 4px 10px 4px 16px; cursor: pointer; align-items: flex-start; }
+  .ann:hover { background: var(--hover); }
+  .ann .ln { font: 11px ui-monospace, monospace; color: var(--accent); flex: none; padding-top: 1px; }
+  .ann .note { flex: 1; }
+  .ann .x { opacity: .5; } .ann .x:hover { opacity: 1; }
+  .mi-ann { background: rgba(217,119,87,.13); }
+  .mi-ann-glyph::before { content: '📍'; font-size: 11px; }
+  /* éditeur de prompt */
+  #dock { flex: none; border-top: 1px solid var(--border); background: var(--panel); display: flex; flex-direction: column; }
+  #dockSplit { height: 4px; cursor: row-resize; }
+  #dockSplit:hover { background: var(--accent); }
+  #plan { padding: 3px 10px; font-size: 12px; border-bottom: 1px solid var(--border); }
+  #plan summary { cursor: pointer; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #plan summary b { color: var(--text); font-weight: 500; }
+  #plan ol { margin: 4px 0 2px; padding-left: 22px; max-height: 160px; overflow: auto; }
+  #plan li.completed { color: var(--muted); text-decoration: line-through; }
+  #plan li.in_progress { color: var(--accent); font-weight: 600; }
+  #queue { padding: 2px 10px 0; }
+  .qi { display: flex; gap: 6px; align-items: center; font-size: 12px; padding: 1px 0; }
+  .qi .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+  .qi button { padding: 0 6px; font-size: 11px; }
+  #promptRow { display: flex; gap: 8px; padding: 4px 10px 4px; }
+  #promptEd { flex: 1; height: var(--dock, 92px); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--bg); }
+  #promptEd.focus { border-color: var(--accent); }
+  #promptSide { display: flex; flex-direction: column; gap: 4px; justify-content: flex-end; align-items: stretch; }
+  #promptHint { font-size: 11px; color: var(--muted); padding: 0 10px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #busyNote { font-size: 11px; color: var(--accent); text-align: center; }
+  #busyNote a { color: var(--muted); cursor: pointer; text-decoration: underline; }
+  /* barre d'état */
+  #statusline { cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  #statusline:hover { color: var(--text); }
+  /* réglages */
+  #settings .card { width: min(880px, 95vw); }
+  #settings .body { padding: 0; display: flex; height: min(600px, 76vh); }
+  #setNav { width: 170px; flex: none; border-right: 1px solid var(--border); background: var(--panel); padding: 8px 0; }
+  #setNav button { display: block; width: 100%; text-align: left; border: 0; border-radius: 0; padding: 7px 14px; }
+  #setNav button.cur { background: var(--sel); box-shadow: inset 2px 0 0 var(--accent); }
+  #setBody { flex: 1; overflow: auto; padding: 10px 16px 16px; min-width: 0; }
+  #setBody h3 { margin: 14px 0 4px; font-size: 13px; }
+  #setBody p.hint { padding: 2px 0 6px; }
+  .set { display: grid; grid-template-columns: 1fr 230px; gap: 12px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); }
+  .set .lab b { display: block; font-weight: 500; }
+  .set .lab small { color: var(--muted); }
+  .set input[type=text], .set input[type=number] { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; }
+  .set select { width: 100%; padding: 4px 6px; border-radius: 6px; }
+  .set.locked { opacity: .55; }
+  #setJson { width: 100%; height: 330px; border: 1px solid var(--border); border-radius: 6px; margin-top: 6px; }
+  .subtabs { display: flex; gap: 4px; margin: 6px 0; flex-wrap: wrap; align-items: center; }
 
   /* panneaux latéraux */
   .item { margin: 4px 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); cursor: pointer; }
@@ -182,6 +257,7 @@
     <button class="ghost okb" id="allOk" title="Valider tous les fichiers encore en revue, tous prompts confondus" hidden></button>
     <button class="ghost" id="qoBtn" title="Ouvrir un fichier">🔎 Ouvrir <kbd>Ctrl+P</kbd></button>
     <button class="ghost" id="notifBtn" title="Notification quand Claude a fini">🔕</button>
+    <button class="ghost" id="setBtn" title="Paramètres">⚙️</button>
   </header>
   <aside>
     <div id="sideTabs">
@@ -189,7 +265,9 @@
       <button data-p="search" title="Rechercher (Ctrl+Shift+F)">🔎</button>
       <button data-p="history" title="Historique des prompts">🕓<span class="n" id="nHist" hidden></span></button>
       <button data-p="review" title="Review pour Claude">💬<span class="n" id="nRev" hidden></span></button>
-      <button data-p="tests" title="Lancer les tests">🧪<span class="n" id="nTests" hidden></span></button>
+      <button data-p="ideas" title="Boîte à idées">💡<span class="n" id="nIdeas" hidden></span></button>
+      <button data-p="ann" title="Annotations de Claude">📍<span class="n" id="nAnn" hidden></span></button>
+      <button data-p="runs" title="Commandes">▶<span class="n" id="nRuns" hidden></span></button>
     </div>
     <div class="panel" id="p-files"><div id="tree"></div></div>
     <div class="panel" id="p-search">
@@ -198,12 +276,23 @@
     </div>
     <div class="panel" id="p-history"><div id="history"></div></div>
     <div class="panel" id="p-review"><div id="review"></div></div>
-    <div class="panel" id="p-tests">
-      <div class="row"><input type="text" id="testsCmd" placeholder="Commande de test (ex. npm test)" spellcheck="false">
-        <button id="testsRun" class="primary" title="Lancer">▶</button><button id="testsStop" title="Arrêter" hidden>■</button></div>
-      <div id="testsStatus" class="hint"></div>
-      <div class="row" id="testsActs" hidden><button id="testsSend" style="width:100%">📎 Joindre le résultat pour Claude</button></div>
-      <pre id="testsOut"></pre>
+    <div class="panel" id="p-ideas">
+      <div class="pad">
+        <textarea id="ideaText" rows="2" placeholder="Une idée… (Entrée pour l'ajouter, Maj+Entrée pour aller à la ligne)"></textarea>
+        <div id="ideaFrom" class="hint" hidden></div>
+        <div style="display:flex;gap:6px;margin-top:4px"><input type="text" id="ideaTags" placeholder="étiquettes, séparées par des virgules"><button id="ideaAdd" class="primary">Ajouter</button></div>
+      </div>
+      <div class="filters" id="ideaFilters"></div>
+      <div id="ideas"></div>
+    </div>
+    <div class="panel" id="p-ann"><div id="anns"></div></div>
+    <div class="panel" id="p-runs">
+      <div class="row2"><input type="text" id="runCmd" placeholder="Une commande (Entrée pour la lancer)" spellcheck="false">
+        <button id="runGo" class="primary" title="Lancer">▶</button><button id="runSave" title="Enregistrer cette commande">💾</button></div>
+      <div id="saveForm" hidden><input type="text" id="saveName" placeholder="Nom (ex. Serveur de dev)"><button id="saveOk" class="primary">OK</button><button id="saveNo">✕</button></div>
+      <h2>Commandes enregistrées</h2><div id="cmds"></div>
+      <h2>Lancements</h2><div id="runs"></div>
+      <h2 id="sugH">Suggestions</h2><div id="sugs"></div>
     </div>
   </aside>
   <div id="split"></div>
@@ -230,11 +319,26 @@
         <kbd>Ctrl+L</kbd> joint la sélection pour Claude, le <b>+</b> d'une ligne la commente.</div>
       <div id="ed" hidden></div>
       <div id="diff" hidden></div>
+      <div id="runView" hidden>
+        <div id="runBar"><b id="runName"></b><code id="runCmdShow"></code><span id="runSt" class="st"></span><span class="spacer"></span>
+          <button id="runStop">■ Arrêter</button><button id="runAgain">↻ Relancer</button><button id="runAttach" title="Joindre la fin de la sortie à ton prochain prompt">📎 Pour Claude</button>
+          <button id="runFollow" class="on" title="Suivre la fin de la sortie">⇩ Suivre</button><button id="runClose">✕</button></div>
+        <pre id="runOut"></pre>
+      </div>
+    </div>
+    <div id="dock">
+      <div id="dockSplit" title="Glisser pour agrandir"></div>
+      <details id="plan" hidden><summary id="planSum"></summary><ol id="planList"></ol></details>
+      <div id="queue"></div>
+      <div id="promptRow"><div id="promptEd"></div>
+        <div id="promptSide"><div id="busyNote" hidden></div><button id="promptSend" class="primary" title="Envoyer à Claude (Ctrl+Entrée)">Envoyer</button></div></div>
+      <div id="promptHint">@ fichier · @fichier:lignes · / commandes et skills · #i idée · Ctrl+L dans le code : joindre la sélection · ↑ ↓ prompts précédents · Ctrl+Entrée : envoyer</div>
     </div>
   </main>
   <footer>
     <span id="activity" class="idle">Claude est en attente</span>
     <span class="spacer"></span>
+    <span id="statusline" title="Barre d'état : clic pour la personnaliser"></span>
     <span class="legend"><i style="background:rgba(46,160,67,.35)"></i>ajouté</span>
     <span class="legend"><i style="background:rgba(248,81,73,.35)"></i>retiré</span>
     <span id="status"></span>
@@ -244,6 +348,8 @@
 <div class="modal" id="qo"><div class="card"><div class="body"><input type="text" id="qoIn" placeholder="Nom de fichier…"></div><div id="qoList"></div></div></div>
 <div class="modal" id="cf"><div class="card"><div class="body" id="cfText"></div>
   <div class="acts"><button id="cfNo">Annuler</button><button id="cfYes" class="primary">Confirmer</button></div></div></div>
+<div class="modal" id="settings"><div class="card"><div class="body"><div id="setNav"></div><div id="setBody"></div></div>
+  <div class="acts"><span class="hint" id="setInfo" style="margin-right:auto"></span><button id="setClose" class="primary">Fermer</button></div></div></div>
 <div id="toasts"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
@@ -351,6 +457,8 @@ function rememberView() {
 }
 function applyLayoutPrefs() {
   document.getElementById('app').style.setProperty('--side', P.side + 'px')
+  if (P.dock) document.getElementById('app').style.setProperty('--dock', P.dock + 'px')
+  if (promptEd && P.draft && !promptEd.getValue()) promptEd.setValue(P.draft)
   showPanel(P.panel, false)
   $('notifBtn').textContent = P.notify ? '🔔' : '🔕'
   for (const b of $('cmpSeg').children) b.classList.toggle('on', b.dataset.c === P.compare)
@@ -453,6 +561,9 @@ function show(kind) {
   $('empty').hidden = kind !== null
   $('ed').hidden = kind !== 'ed'
   $('diff').hidden = kind !== 'diff'
+  $('runView').hidden = kind !== 'run'
+  $('bar').style.display = kind === 'run' ? 'none' : ''
+  if (kind === 'run') return
   const isFile = view.kind === 'file'
   const f = cur && files.get(cur)
   const claudeDiff = kind === 'diff' && isFile && P.compare === 'claude' && isChanged(cur)
@@ -644,6 +755,7 @@ function linesOf(model, a, b) {
 }
 
 function renderZones() {
+  applyAnnotations()
   // un rafraîchissement pendant que tu écris : on garde le focus et le curseur
   const act = document.activeElement
   if (act && act._draft) { act._draft.focus = true; act._draft.caret = [act.selectionStart, act.selectionEnd] }
@@ -865,7 +977,7 @@ function renderReview() {
     box.append(h('div', { class: 'hint' }, 'Sinon, joint automatiquement à ton prochain prompt.'))
   }
   for (const it of items) {
-    const icon = it.kind === 'reject' ? '❌' : it.kind === 'restore' ? '↶' : it.kind === 'snippet' ? '📎' : it.kind === 'tests' ? '🧪' : '💬'
+    const icon = it.kind === 'reject' ? '❌' : it.kind === 'restore' ? '↶' : it.kind === 'snippet' ? '📎' : it.kind === 'tests' ? '▶' : it.kind === 'idea' ? '💡' : '💬'
     const where = it.path ? `${rel(it.path)}${it.line ? `:${it.line}${it.endLine && it.endLine !== it.line ? '-' + it.endLine : ''}` : ''}` : it.kind === 'tests' ? 'Tests' : 'Restauration'
     box.append(h('div', { class: 'item', onclick: () => it.path && openFile(it.path, { line: it.line || 1 }) },
       h('div', { class: 'top' }, `${icon} ${where}`, h('span', { class: 'x', title: 'Retirer', onclick: (e) => { e.stopPropagation(); event({ type: 'uncomment', id: it.id }) } }, '✕')),
@@ -875,57 +987,489 @@ function renderReview() {
   }
 }
 
-// ---------- tests ----------
-let T_ = { running: false, command: '', started: 0, ended: 0, code: null, out: '' }
-const TAIL_LINES = 150
+// ---------- exécuteur de commandes ----------
+const runs = new Map()       // id -> { id, name, command, started, ended, code, running, tail }
+let suggests = []
+let editingCmd = null         // id de la commande enregistrée qu'on modifie
 const dur = (ms) => (ms < 60_000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.floor(ms / 60_000)} min ${Math.round((ms % 60_000) / 1000)} s`)
-function renderTests() {
-  const st = $('testsStatus')
-  $('testsRun').hidden = T_.running
-  $('testsStop').hidden = !T_.running
-  $('testsCmd').disabled = T_.running
-  const failed = !T_.running && T_.ended && T_.code !== 0
-  $('nTests').hidden = !T_.running && !failed
-  $('nTests').textContent = T_.running ? '…' : '!'
-  st.className = ''
-  if (T_.running) st.textContent = `⏳ En cours depuis ${fmtTime(T_.started)}…`
-  else if (T_.ended) {
-    st.className = T_.code === 0 ? 'ok' : 'bad'
-    st.textContent = `${T_.code === 0 ? '✅ Réussi' : `❌ Échec (code ${T_.code})`} · ${dur(T_.ended - T_.started)} · ${fmtTime(T_.ended)}`
-  } else {
-    st.className = 'hint'
-    st.textContent = 'Lance les tests du projet. La commande est gardée pour ce projet.'
-  }
-  $('testsActs').hidden = T_.running || !T_.ended
-  const out = $('testsOut')
-  const atEnd = out.scrollTop + out.clientHeight >= out.scrollHeight - 20
-  out.textContent = T_.out
-  if (atEnd) out.scrollTop = out.scrollHeight
-}
-async function loadTests() {
-  const r = await api('/api/tests')
+const runState = (r) => r.running ? ['live', '⏳ en cours'] : r.stopped ? ['', `■ arrêté · ${dur(r.ended - r.started)}`] : r.code === 0 ? ['ok', `✅ ${dur(r.ended - r.started)}`] : ['bad', `❌ code ${r.code}`]
+
+async function loadRuns() {
+  const r = await api('/api/runs')
   if (!r.ok) return
-  const t = await r.json()
-  T_ = { ...T_, ...t }
-  if (!$('testsCmd').value) $('testsCmd').value = P.testCmd || t.command || t.suggested || ''
-  renderTests()
+  const d = await r.json()
+  runs.clear()
+  for (const x of d.runs) runs.set(x.id, x)
+  suggests = d.suggestions || []
+  renderRuns()
 }
-async function runTests() {
-  const command = $('testsCmd').value.trim()
-  if (!command) return $('testsCmd').focus()
-  if (command !== P.testCmd) { P.testCmd = command; savePrefs() }
-  const r = await api('/api/tests/run', { method: 'POST', body: JSON.stringify({ command }) })
-  if (!r.ok) toast((await r.json().catch(() => ({}))).error || 'Impossible de lancer les tests')
+async function runCommand(command, name = '') {
+  command = (command || '').trim()
+  if (!command) return $('runCmd').focus()
+  const r = await api('/api/run', { method: 'POST', body: JSON.stringify({ command, name }) })
+  if (!r.ok) return toast((await r.json().catch(() => ({}))).error || 'Impossible de lancer la commande')
+  const run = await r.json()
+  runs.set(run.id, run)
+  renderRuns()
+  openRun(run.id)
 }
-function sendTests() {
-  const lines = T_.out.replace(/\s+$/, '').split('\n')
-  const tail = lines.slice(-TAIL_LINES).join('\n')
-  const verdict = T_.code === 0 ? 'réussis' : `en échec (code ${T_.code})`
+function renderRuns() {
+  const cmds = (srv.project && srv.project.commands) || []
+  const live = [...runs.values()].filter((r) => r.running).length
+  $('nRuns').hidden = !live
+  $('nRuns').textContent = live
+  const box = $('cmds')
+  box.replaceChildren()
+  if (!cmds.length) box.append(h('div', { class: 'hint' }, 'Aucune. 💾 enregistre la commande tapée ci-dessus, ou demande à Claude d\'en enregistrer une.'))
+  for (const c of cmds) {
+    const running = [...runs.values()].find((r) => r.running && r.command === c.command)
+    box.append(h('div', { class: 'cmd' + (running ? ' live' : ''), title: c.description || c.command },
+      h('div', { class: 'top' }, h('span', { class: 'nm' }, c.name), c.by === 'claude' ? h('span', { class: 'by' }, '🤖 Claude') : null,
+        h('span', { class: 'acts' },
+          running ? h('button', { title: 'Voir les logs', onclick: () => openRun(running.id) }, '🖥') : null,
+          running ? h('button', { title: 'Arrêter', onclick: () => stopRun(running.id) }, '■') : h('button', { class: 'primary', title: 'Lancer', onclick: () => runCommand(c.command, c.name) }, '▶'),
+          h('button', { title: 'Modifier', onclick: () => editCommand(c) }, '✎'),
+          h('button', { title: 'Supprimer', onclick: () => event({ type: 'command.delete', id: c.id }) }, '🗑'))),
+      h('code', {}, c.command),
+      c.description ? h('div', { class: 'hint', style: 'padding:2px 0 0' }, c.description) : null))
+  }
+  const rbox = $('runs')
+  rbox.replaceChildren()
+  const list = [...runs.values()].sort((a, b) => b.started - a.started)
+  if (!list.length) rbox.append(h('div', { class: 'hint' }, 'Rien n\'a encore été lancé.'))
+  for (const r of list) {
+    const [cls, label] = runState(r)
+    rbox.append(h('div', { class: 'run' + (r.running ? ' live' : '') },
+      h('div', { class: 'top' }, h('span', { class: 'nm' }, r.name), h('span', { class: 'st ' + cls }, label),
+        h('span', { class: 'acts' },
+          h('button', { title: 'Ouvrir le terminal de cette commande (logs)', onclick: () => openRun(r.id) }, '🖥'),
+          r.running ? h('button', { title: 'Arrêter', onclick: () => stopRun(r.id) }, '■') : h('button', { title: 'Relancer', onclick: () => runCommand(r.command, r.name) }, '↻'),
+          !r.running ? h('button', { title: 'Retirer de la liste', onclick: () => api('/api/run/forget', { method: 'POST', body: JSON.stringify({ id: r.id }) }) }, '✕') : null)),
+      h('code', {}, `${fmtTime(r.started)} · ${r.command}`)))
+  }
+  const known = new Set([...cmds.map((c) => c.command), ...list.map((r) => r.command)])
+  const sugs = suggests.filter((x) => !known.has(x.command))
+  $('sugH').hidden = !sugs.length
+  const sbox = $('sugs')
+  sbox.replaceChildren()
+  for (const x of sugs) sbox.append(h('div', { class: 'cmd' },
+    h('div', { class: 'top' }, h('span', { class: 'nm' }, x.name),
+      h('span', { class: 'acts' },
+        h('button', { title: 'Lancer', onclick: () => runCommand(x.command, x.name) }, '▶'),
+        h('button', { title: 'Enregistrer', onclick: () => event({ type: 'command.save', name: x.name, command: x.command }) }, '💾'))),
+    h('code', {}, x.command)))
+  if (view.kind === 'run') renderRunBar()
+}
+function editCommand(c) {
+  editingCmd = c.id
+  $('runCmd').value = c.command
+  $('saveName').value = c.name
+  $('saveForm').hidden = false
+  $('saveName').focus()
+}
+function saveCommand() {
+  const command = $('runCmd').value.trim()
+  const name = $('saveName').value.trim()
+  if (!command) { toast('Tape d\'abord une commande'); return $('runCmd').focus() }
+  if (!name) return $('saveName').focus()
+  event({ type: 'command.save', id: editingCmd, name, command })
+  editingCmd = null
+  $('saveForm').hidden = true
+  $('saveName').value = ''
+}
+const stopRun = (id) => api('/api/run/stop', { method: 'POST', body: JSON.stringify({ id }) })
+
+// le « terminal » d'une commande : sa sortie en direct
+let runOut = ''
+async function openRun(id) {
+  if (view.kind === 'file' && cur) rememberView()
+  view = { kind: 'run', id }
+  const r = await api(`/api/run?id=${encodeURIComponent(id)}`)
+  if (!r.ok) return toast('Ce lancement n\'existe plus')
+  const d = await r.json()
+  runs.set(d.id, { ...d, out: undefined })
+  runOut = d.out
+  show('run')
+  renderRunBar()
+  $('runOut').textContent = runOut
+  $('runOut').scrollTop = $('runOut').scrollHeight
+  renderTabs()
+}
+function renderRunBar() {
+  const r = runs.get(view.id)
+  if (!r) return
+  const [cls, label] = runState(r)
+  $('runName').textContent = r.name
+  $('runCmdShow').textContent = r.command
+  $('runSt').className = 'st ' + cls
+  $('runSt').textContent = label
+  $('runStop').hidden = !r.running
+  $('runAgain').hidden = r.running
+}
+function appendRunOut(text) {
+  const out = $('runOut')
+  runOut = (runOut + text).slice(-1_000_000)
+  out.append(text)
+  if ($('runFollow').classList.contains('on')) out.scrollTop = out.scrollHeight
+}
+function attachRun() {
+  const r = runs.get(view.id)
+  if (!r) return
+  const lines = runOut.replace(/\s+$/, '').split('\n')
+  const TAIL = 150
+  const state = r.running ? 'toujours en cours' : r.stopped ? 'arrêtée par l\'utilisateur' : r.code === 0 ? 'terminée sans erreur' : `terminée en échec (code ${r.code})`
   event({
     type: 'tests',
-    text: `Tests lancés par l'utilisateur avec \`${T_.command}\` : ${verdict}.${lines.length > TAIL_LINES ? ` Voici les ${TAIL_LINES} dernières lignes :` : ''}`,
-    code: tail,
+    text: `Sortie de la commande « ${r.name} » (\`${r.command}\`), ${state}.${lines.length > TAIL ? ` Voici les ${TAIL} dernières lignes :` : ''}`,
+    code: lines.slice(-TAIL).join('\n'),
   })
+}
+
+// ---------- boîte à idées ----------
+let ideaFrom = null   // { path, line, endLine, code } quand l'idée naît d'une sélection
+const IDEA_FILTERS = [['all', 'Toutes'], ['new', 'Nouvelles'], ['doing', 'En cours'], ['done', 'Faites']]
+const STATUS_LABEL = { new: 'Nouvelle', doing: 'En cours', done: 'Faite' }
+function renderIdeas() {
+  const ideas = (srv.project && srv.project.ideas) || []
+  const fresh = ideas.filter((i) => i.status === 'new').length
+  $('nIdeas').hidden = !fresh
+  $('nIdeas').textContent = fresh
+  const f = $('ideaFilters')
+  f.replaceChildren(...IDEA_FILTERS.map(([k, label]) => h('button', { class: (P.ideaFilter || 'all') === k ? 'on' : '', onclick: () => { P.ideaFilter = k; savePrefs(); renderIdeas() } },
+    `${label} ${k === 'all' ? ideas.length : ideas.filter((i) => i.status === k).length}`)))
+  const box = $('ideas')
+  box.replaceChildren()
+  const shown = ideas.filter((i) => (P.ideaFilter || 'all') === 'all' || i.status === P.ideaFilter).slice().reverse()
+  if (!shown.length) box.append(h('div', { class: 'hint' }, ideas.length ? 'Aucune idée dans ce filtre.' : 'Note ici tes idées. Clic droit sur du code → 💡 pour partir d\'une sélection, et Claude peut aussi en noter.'))
+  for (const i of shown) {
+    const sel = h('select', { title: 'État', onchange: (e) => event({ type: 'idea.update', id: i.id, status: e.target.value }) },
+      ...Object.entries(STATUS_LABEL).map(([k, v]) => { const o = h('option', { value: k }, v); if (k === i.status) o.selected = true; return o }))
+    const txt = h('div', { class: 'txt', title: 'Double-clic pour modifier' }, i.text)
+    txt.ondblclick = () => editIdea(i, txt)
+    box.append(h('div', { class: 'idea' + (i.status === 'done' ? ' done' : '') },
+      h('div', { class: 'top' }, h('span', { class: 'num' }, `#i${i.n}`), i.by === 'claude' ? h('span', { class: 'by' }, '🤖 Claude') : null, sel,
+        h('span', { class: 'acts' },
+          h('button', { title: 'Mentionner dans le prompt', onclick: () => insertInPrompt(`#i${i.n} `) }, '✍'),
+          h('button', { title: 'Joindre à ton prochain prompt', onclick: () => event({ type: 'idea.attach', id: i.id }) }, '📎'),
+          h('button', { title: 'Supprimer', onclick: () => event({ type: 'idea.delete', id: i.id }) }, '🗑'))),
+      txt,
+      i.path ? h('div', { class: 'loc', onclick: () => openFile(i.path, { line: i.line || 1 }) }, `📄 ${rel(i.path)}${i.line ? `:${i.line}${i.endLine && i.endLine !== i.line ? '-' + i.endLine : ''}` : ''}`) : null,
+      i.tags && i.tags.length ? h('div', { class: 'tags' }, ...i.tags.map((t) => h('span', {}, t))) : null))
+  }
+}
+function editIdea(i, el) {
+  const ta = h('textarea', { rows: 3 })
+  ta.value = i.text
+  const done = (keep) => { if (keep && ta.value.trim() && ta.value.trim() !== i.text) event({ type: 'idea.update', id: i.id, text: ta.value }); else renderIdeas() }
+  ta.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); done(true) } if (e.key === 'Escape') done(false) }
+  ta.onblur = () => done(true)
+  el.replaceWith(ta)
+  ta.focus()
+}
+function addIdea() {
+  const text = $('ideaText').value.trim()
+  if (!text) return $('ideaText').focus()
+  const tags = $('ideaTags').value.split(',').map((t) => t.trim()).filter(Boolean)
+  event({ type: 'idea.add', text, tags, ...(ideaFrom || {}) })
+  $('ideaText').value = ''
+  $('ideaTags').value = ''
+  setIdeaFrom(null)
+}
+function setIdeaFrom(from) {
+  ideaFrom = from
+  const box = $('ideaFrom')
+  box.hidden = !from
+  if (from) box.replaceChildren(h('span', {}, `📄 Liée à ${rel(from.path)}:${from.line}${from.endLine !== from.line ? '-' + from.endLine : ''}`), h('a', { style: 'cursor:pointer', onclick: () => setIdeaFrom(null) }, '✕'))
+}
+
+// ---------- annotations de Claude ----------
+function renderAnns() {
+  const anns = (srv.project && srv.project.annotations) || []
+  $('nAnn').hidden = !anns.length
+  $('nAnn').textContent = anns.length
+  const box = $('anns')
+  box.replaceChildren()
+  if (!anns.length) return box.append(h('div', { class: 'hint' }, 'Demande à Claude « où se trouve… ? » : il pose des annotations dans le code, et un clic ici t\'y emmène.'))
+  box.append(h('div', { class: 'pad' }, h('button', { style: 'width:100%', onclick: () => event({ type: 'annotation.clear' }) }, `🧹 Tout effacer (${anns.length})`)))
+  const byFile = new Map()
+  for (const a of anns) byFile.set(a.path, [...(byFile.get(a.path) || []), a])
+  for (const [p, list] of byFile) {
+    box.append(h('div', { class: 'annf', title: rel(p) }, `📄 ${rel(p)}`))
+    for (const a of list.sort((x, y) => x.line - y.line))
+      box.append(h('div', { class: 'ann', onclick: () => openFile(a.path, { line: a.line }) },
+        h('span', { class: 'ln' }, `${a.line}${a.endLine ? '-' + a.endLine : ''}`), h('span', { class: 'note' }, a.note),
+        h('span', { class: 'x', title: 'Retirer', onclick: (e) => { e.stopPropagation(); event({ type: 'annotation.delete', id: a.id }) } }, '✕')))
+  }
+}
+/** les annotations du fichier ouvert, surlignées dans l'éditeur */
+let annDeco = { ed: null, diff: null }
+function applyAnnotations() {
+  if (!monaco) return
+  const anns = view.kind === 'file' && cur ? ((srv.project && srv.project.annotations) || []).filter((a) => a.path === cur) : []
+  const decos = anns.map((a) => ({
+    range: new monaco.Range(a.line, 1, a.endLine || a.line, 1),
+    options: { isWholeLine: true, className: 'mi-ann', glyphMarginClassName: 'mi-ann-glyph', hoverMessage: { value: '📍 **Claude** : ' + a.note } },
+  }))
+  for (const [k, ed] of [['ed', editor], ['diff', diff.getModifiedEditor()]]) {
+    if (!annDeco[k]) annDeco[k] = ed.createDecorationsCollection()
+    annDeco[k].set(!$(k === 'ed' ? 'ed' : 'diff').hidden ? decos : [])
+  }
+}
+
+// ---------- barre d'état ----------
+function renderStatus() {
+  const st = srv.status || {}
+  const plan = srv.plan || []
+  const doing = plan.find((x) => x.status === 'in_progress')
+  const vals = {
+    model: st.model ? st.model.replace(/^claude-/, '') : '',
+    context: typeof st.percent === 'number' ? `${Math.round(st.percent)} %` : st.tokens && st.window ? `${Math.round((100 * st.tokens) / st.window)} %` : '',
+    tokens: st.tokens ? `${(st.tokens / 1000).toFixed(1)} k` : '',
+    window: st.window ? `${Math.round(st.window / 1000)} k` : '',
+    cost: typeof st.usd === 'number' ? `${st.usd.toFixed(2)} $` : '',
+    branch: st.branch ? `⎇ ${st.branch}` : '',
+    plan: doing ? doing.activeForm : '',
+    queue: (srv.queue || []).length ? `${srv.queue.length} en attente` : '',
+    review: srv.changes.length ? `${srv.changes.length} en revue` : '',
+    time: fmtTime(Date.now()),
+  }
+  const tpl = (srv.ide && srv.ide.statusline) || '{model} · contexte {context} · {cost} · {branch}'
+  // une variable vide emporte le texte qui l'entoure jusqu'au séparateur « · »
+  const text = tpl.split('·').map((part) => {
+    let empty = false
+    const out = part.replace(/\{(\w+)\}/g, (_, k) => { const v = vals[k]; if (v === undefined || v === '') empty = true; return v ?? '' })
+    return empty ? '' : out.trim()
+  }).filter(Boolean).join(' · ')
+  $('statusline').textContent = text
+}
+
+// ---------- éditeur de prompt ----------
+let promptEd = null
+let hIdx = -1          // position dans l'historique des prompts (-1 : le brouillon)
+let draftKeep = ''
+let draftTimer
+let filesCache = { at: 0, list: [] }
+async function projectFiles() {
+  if (Date.now() - filesCache.at < 30_000) return filesCache.list
+  const r = await api('/api/files')
+  if (r.ok) filesCache = { at: Date.now(), list: (await r.json()).files }
+  return filesCache.list
+}
+function insertInPrompt(text) {
+  if (!promptEd) return
+  const m = promptEd.getModel()
+  const sel = promptEd.getSelection()
+  const pos = sel || new monaco.Selection(m.getLineCount(), m.getLineMaxColumn(m.getLineCount()), m.getLineCount(), m.getLineMaxColumn(m.getLineCount()))
+  const before = m.getValueInRange(new monaco.Range(pos.startLineNumber, Math.max(1, pos.startColumn - 1), pos.startLineNumber, pos.startColumn))
+  const t = (before && !/\s/.test(before) ? ' ' : '') + text
+  promptEd.executeEdits('mi', [{ range: pos, text: t, forceMoveMarkers: true }])
+  promptEd.focus()
+}
+function sendPrompt() {
+  const text = promptEd.getValue().trim()
+  if (!text) return
+  event({ type: 'prompt.send', text })
+  promptEd.setValue('')
+  hIdx = -1
+  P.draft = ''
+  savePrefs()
+}
+function historyStep(dir) {
+  const list = (srv.project && srv.project.prompts) || []
+  if (!list.length) return false
+  const next = Math.max(-1, Math.min(list.length - 1, hIdx + dir))
+  if (next === hIdx) return true
+  if (hIdx === -1) { draftKeep = promptEd.getValue(); clearTimeout(draftTimer) }
+  hIdx = next
+  promptEd.setValue(hIdx === -1 ? draftKeep : list[list.length - 1 - hIdx])
+  const m = promptEd.getModel()
+  promptEd.setPosition(dir > 0 ? { lineNumber: 1, column: 1 } : { lineNumber: m.getLineCount(), column: m.getLineMaxColumn(m.getLineCount()) })
+  return true
+}
+function renderDock() {
+  // le plan de Claude
+  const plan = srv.plan || []
+  $('plan').hidden = !plan.length
+  if (plan.length) {
+    const done = plan.filter((x) => x.status === 'completed').length
+    const doing = plan.find((x) => x.status === 'in_progress')
+    $('planSum').replaceChildren('📋 Plan de Claude · ', h('b', {}, `${done}/${plan.length}`), doing ? ` · ${doing.activeForm}` : done === plan.length ? ' · terminé' : '')
+    $('planList').replaceChildren(...plan.map((x) => h('li', { class: x.status }, `${x.status === 'completed' ? '✅' : x.status === 'in_progress' ? '◐' : '○'} ${x.status === 'in_progress' ? x.activeForm : x.content}`)))
+    if ($('plan').open !== !!P.planOpen) $('plan').open = !!P.planOpen
+  }
+  // la file d'attente
+  const q = srv.queue || []
+  $('queue').replaceChildren(...q.map((x, i) => h('div', { class: 'qi' },
+    h('span', {}, `⏳ ${i + 1}.`), h('span', { class: 't', title: x.text }, x.text),
+    h('button', { title: 'Envoyer tout de suite (Claude le prendra dès qu\'il sera libre)', onclick: () => event({ type: 'queue.now', id: x.id }) }, '⤴'),
+    h('button', { title: 'Reprendre dans l\'éditeur', onclick: () => { event({ type: 'queue.remove', id: x.id }); promptEd.setValue(x.text); promptEd.focus() } }, '✎'),
+    h('button', { title: 'Retirer', onclick: () => event({ type: 'queue.remove', id: x.id }) }, '✕'))))
+  // Claude travaille : ce qu'on envoie attend son tour
+  $('busyNote').hidden = !srv.busy
+  if (srv.busy) $('busyNote').replaceChildren('⏳ Claude travaille ', h('a', { title: 'Si Claude a été interrompu et que la file reste bloquée', onclick: () => event({ type: 'busy.reset' }) }, 'débloquer'))
+  $('promptSend').textContent = srv.busy ? 'Mettre en file' : 'Envoyer'
+}
+
+// ---------- réglages de l'éditeur (à la manière du settings.json de VS Code) ----------
+const EDITOR_FIELDS = [
+  ['editor.fontSize', 'Taille du texte', 'number', 13],
+  ['editor.fontFamily', 'Police', 'text', ''],
+  ['editor.lineHeight', 'Hauteur de ligne (0 : auto)', 'number', 0],
+  ['editor.tabSize', 'Largeur des tabulations', 'number', 4],
+  ['editor.insertSpaces', 'Espaces à la place des tabulations', 'bool', true],
+  ['editor.wordWrap', 'Retour à la ligne', ['off', 'on', 'bounded', 'wordWrapColumn'], 'off'],
+  ['editor.minimap.enabled', 'Minimap', 'bool', false],
+  ['editor.lineNumbers', 'Numéros de ligne', ['on', 'off', 'relative'], 'on'],
+  ['editor.renderWhitespace', 'Afficher les espaces', ['none', 'boundary', 'selection', 'trailing', 'all'], 'selection'],
+  ['editor.cursorStyle', 'Curseur', ['line', 'block', 'underline', 'line-thin', 'block-outline'], 'line'],
+  ['editor.cursorBlinking', 'Clignotement du curseur', ['blink', 'smooth', 'phase', 'expand', 'solid'], 'blink'],
+  ['editor.fontLigatures', 'Ligatures', 'bool', false],
+  ['editor.smoothScrolling', 'Défilement doux', 'bool', false],
+  ['editor.bracketPairColorization.enabled', 'Couleurs des parenthèses', 'bool', true],
+  ['editor.stickyScroll.enabled', 'En-têtes collants (sticky scroll)', 'bool', false],
+  ['editor.theme', 'Thème', ['auto', 'clair', 'sombre', 'contraste élevé'], 'auto'],
+]
+const NO_TOUCH = new Set(['readOnly', 'automaticLayout', 'model', 'glyphMargin', 'originalEditable'])
+function monacoOptions(settings) {
+  const opts = {}
+  for (const [k, v] of Object.entries(settings || {})) {
+    if (!k.startsWith('editor.') || k === 'editor.theme') continue
+    const path = k.slice(7).split('.')
+    if (NO_TOUCH.has(path[0])) continue
+    let o = opts
+    for (const p of path.slice(0, -1)) o = o[p] = o[p] && typeof o[p] === 'object' ? o[p] : {}
+    o[path[path.length - 1]] = v
+  }
+  return opts
+}
+function themeOf(settings) {
+  const t = settings && settings['editor.theme']
+  if (t === 'clair') return 'vs'
+  if (t === 'sombre') return 'vs-dark'
+  if (t === 'contraste élevé') return 'hc-black'
+  const vs = settings && settings['workbench.colorTheme']
+  if (!t && typeof vs === 'string') return /high contrast/i.test(vs) ? 'hc-black' : /light/i.test(vs) ? 'vs' : 'vs-dark'
+  return null // auto : suit le système
+}
+let appliedEditor = ''
+function applyEditorSettings() {
+  if (!monaco) return
+  const settings = srv.editor || {}
+  const key = JSON.stringify(settings)
+  if (key === appliedEditor) return
+  appliedEditor = key
+  const opts = monacoOptions(settings)
+  editor.updateOptions(opts)
+  diff.updateOptions(opts)
+  if (promptEd) promptEd.updateOptions({ fontSize: opts.fontSize, fontFamily: opts.fontFamily, lineHeight: opts.lineHeight, fontLigatures: opts.fontLigatures })
+  applyTheme()
+}
+function applyTheme() {
+  const forced = themeOf(srv.editor)
+  monaco.editor.setTheme(forced || (matchMedia('(prefers-color-scheme: dark)').matches ? 'vs-dark' : 'vs'))
+}
+
+// ---------- fenêtre des paramètres ----------
+let setTab = 'editor'
+let setJson = null       // l'éditeur JSON des paramètres
+let jsonScope = 'editor' // ce qu'il montre : editor, user, project, local
+let config = null        // { rows, files } envoyé par la mod
+function openSettings(tab) {
+  if (tab) setTab = tab
+  $('settings').classList.add('show')
+  renderSettings()
+  if (setTab === 'claude') event({ type: 'config.load' })
+}
+function closeSettings() { $('settings').classList.remove('show') }
+function setRow(label, hint, control, locked = false) {
+  return h('div', { class: 'set' + (locked ? ' locked' : '') }, h('div', { class: 'lab' }, h('b', {}, label), hint ? h('small', {}, hint) : null), control)
+}
+function control(kind, value, onchange, opts = {}) {
+  if (kind === 'bool' || kind === 'boolean') {
+    const c = h('input', { type: 'checkbox', disabled: opts.disabled })
+    c.checked = !!value
+    c.onchange = () => onchange(c.checked)
+    return h('div', {}, c)
+  }
+  if (Array.isArray(kind)) {
+    const sel = h('select', { disabled: opts.disabled }, ...kind.map((o) => { const e = h('option', { value: o }, o); if (String(o) === String(value)) e.selected = true; return e }))
+    sel.onchange = () => onchange(sel.value)
+    return sel
+  }
+  const inp = h('input', { type: kind === 'number' ? 'number' : 'text', disabled: opts.disabled, placeholder: opts.placeholder || '' })
+  inp.value = value ?? ''
+  inp.onchange = () => onchange(kind === 'number' ? Number(inp.value) : inp.value)
+  return inp
+}
+function renderSettings() {
+  const nav = $('setNav')
+  nav.replaceChildren(...[['editor', '✏️ Éditeur'], ['ide', '🧩 IDE for Claude'], ['claude', '✳️ Claude Code']].map(([k, label]) =>
+    h('button', { class: setTab === k ? 'cur' : '', onclick: () => openSettings(k) }, label)))
+  const body = $('setBody')
+  body.replaceChildren()
+  $('setInfo').textContent = ''
+  if (setTab === 'editor') {
+    const settings = { ...(srv.editor || {}) }
+    const put = (k, v) => { const next = { ...(srv.editor || {}), [k]: v }; if (v === '' || v === null) delete next[k]; srv.editor = next; event({ type: 'editor.set', settings: next }); applyEditorSettings() }
+    body.append(h('p', { class: 'hint' }, 'Pour toi, dans tous les projets. Les noms suivent le settings.json de VS Code.'),
+      h('div', { class: 'subtabs' },
+        h('button', { onclick: () => event({ type: 'editor.importVSCode' }) }, '⇣ Importer mon settings.json de VS Code'),
+        h('button', { onclick: () => { srv.editor = {}; event({ type: 'editor.set', settings: {} }); applyEditorSettings(); renderSettings() } }, '↺ Réinitialiser')))
+    for (const [k, label, kind, def] of EDITOR_FIELDS) body.append(setRow(label, k, control(kind, settings[k] ?? def, (v) => put(k, v))))
+    body.append(h('h3', {}, 'settings.json de l\'éditeur'), h('p', { class: 'hint' }, 'Toutes les options de Monaco y passent (« editor.xxx »). Ctrl+S pour enregistrer.'))
+    body.append(jsonBox('editor', JSON.stringify(settings, null, 2)))
+  } else if (setTab === 'ide') {
+    const ide = srv.ide || {}
+    const put = (k, v) => { srv.ide = { ...ide, [k]: v }; event({ type: 'ide.set', settings: { [k]: v } }); renderStatus() }
+    const putP = (k, v) => { P[k] = v; savePrefs() }
+    body.append(h('h3', {}, 'Claude et la revue'),
+      setRow('Ouvrir le panneau du terminal tout seul', 'À la première modif de Claude, quand la page web n\'est pas ouverte', control('bool', ide.autoOpenPane, (v) => put('autoOpenPane', v))),
+      setRow('Joindre la revue au prochain prompt', 'Commentaires, rejets, idées et extraits partent avec ton prochain prompt', control('bool', ide.attachReview, (v) => put('attachReview', v))),
+      setRow('Conserver l\'historique', 'En jours, pour chaque session', control('number', ide.historyDays, (v) => put('historyDays', v))),
+      h('h3', {}, 'Page web (ce projet)'),
+      setRow('Ouvrir les fichiers modifiés par Claude', 'Le dernier fichier modifié s\'affiche tout seul', control('bool', P.openChanged !== false, (v) => putP('openChanged', v))),
+      setRow('Son de fin', 'Quand Claude a fini, avec les notifications 🔔', control('bool', P.sound !== false, (v) => putP('sound', v))),
+      h('h3', {}, 'Barre d\'état'),
+      setRow('Modèle', 'Variables : {model} {context} {tokens} {window} {cost} {branch} {plan} {queue} {review} {time}. Tu peux aussi demander à Claude de la changer.', control('text', ide.statusline, (v) => put('statusline', v))))
+  } else {
+    body.append(h('p', { class: 'hint' }, 'Les réglages de /config, appliqués tout de suite. Plus bas, les fichiers settings.json de Claude Code.'))
+    if (!['user', 'project', 'local'].includes(jsonScope)) jsonScope = 'user'
+    if (!config) body.append(h('div', { class: 'hint' }, 'Chargement…'))
+    else {
+      for (const r of config.rows) {
+        const kind = r.kind === 'choice' ? (r.options || []) : r.kind === 'boolean' ? 'bool' : r.kind
+        body.append(setRow(r.label || r.key, (r.description || '') + (r.isLocked ? ' · verrouillé' : ''), control(kind, r.value, (v) => event({ type: 'config.set', key: r.key, value: v }), { disabled: r.isLocked }), r.isLocked))
+      }
+      body.append(h('h3', {}, 'settings.json'),
+        h('p', { class: 'hint' }, 'Permissions, hooks, variables d\'environnement… Le JSON est vérifié avant d\'être écrit, et l\'ancienne version est gardée en .bak.'),
+        h('div', { class: 'subtabs' }, ...[['user', 'Utilisateur'], ['project', 'Projet'], ['local', 'Local']].map(([k, label]) =>
+          h('button', { class: jsonScope === k ? 'on' : '', title: config.files[k] && config.files[k].path, onclick: () => { jsonScope = k; renderSettings() } }, label))))
+      const f = config.files[jsonScope]
+      body.append(h('code', { class: 'hint' }, f ? f.path : ''), jsonBox(jsonScope, f && f.text !== null ? f.text : '{\n}\n'))
+    }
+  }
+}
+function jsonBox(scope, text) {
+  jsonScope = scope
+  const box = h('div', { id: 'setJson' })
+  const actions = h('div', { class: 'subtabs' }, h('button', { class: 'primary', onclick: () => saveJson() }, '💾 Enregistrer'))
+  setTimeout(() => {
+    if (setJson) setJson.dispose()
+    setJson = monaco.editor.create(box, { value: text, language: 'json', automaticLayout: true, minimap: { enabled: false }, fontSize: 12, scrollBeyondLastLine: false })
+    setJson.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveJson())
+  }, 0)
+  return h('div', {}, box, actions)
+}
+function saveJson() {
+  if (!setJson) return
+  const text = setJson.getValue()
+  try { JSON.parse(text) } catch (e) { $('setInfo').textContent = '⚠️ JSON invalide : ' + e.message; return }
+  if (jsonScope === 'editor') {
+    srv.editor = JSON.parse(text)
+    event({ type: 'editor.set', settings: srv.editor })
+    applyEditorSettings()
+    $('setInfo').textContent = '✅ Enregistré'
+  } else event({ type: 'settings.save', scope: jsonScope, text })
 }
 
 // ---------- recherche ----------
@@ -998,12 +1542,18 @@ async function refreshState() {
   renderTree()
   renderHistory()
   renderReview()
+  renderIdeas()
+  renderAnns()
+  renderRuns()
+  renderDock()
+  renderStatus()
+  applyEditorSettings()
   $('allOk').hidden = !srv.changes.length
   $('allOk').textContent = `✅ Tout valider (${srv.changes.length})`
   const f = cur && files.get(cur)
   const busy = f && view.kind === 'file' && f.model.getValue() !== f.base
   const fresh = srv.changes.find((c) => !prev.has(c.path))
-  if (fresh && !busy && prev.size + 1 > 0 && document.readyState === 'complete' && started) return openFile(fresh.path)
+  if (fresh && !busy && P.openChanged !== false && view.kind !== 'run' && document.readyState === 'complete' && started) return openFile(fresh.path)
   if (cur && view.kind === 'file' && !busy) {
     const had = f && f.before !== null && f.before !== undefined
     if (P.compare === 'claude' && isChanged(cur) !== had) return openFile(cur, { keepView: true })
@@ -1014,22 +1564,37 @@ async function refreshState() {
 let started = false
 function connect() {
   const es = new EventSource(`/events?t=${encodeURIComponent(T)}`)
-  es.onopen = () => { $('dot').classList.add('on'); $('dot').title = 'Connecté'; refreshState().then(loadTests) }
+  es.onopen = () => { $('dot').classList.add('on'); $('dot').title = 'Connecté'; refreshState().then(loadRuns) }
   es.onerror = () => { $('dot').classList.remove('on'); $('dot').title = 'Déconnecté (session Claude fermée ?)' }
   es.onmessage = async (m) => {
     const ev = JSON.parse(m.data)
     if (ev.type === 'state') return refreshState()
     if (ev.type === 'toast') return toast(ev.text)
-    if (ev.type === 'tests') {
-      if (ev.phase === 'out') { T_.out = (T_.out + ev.text).slice(-1_000_000); return renderTests() }
-      const { type, phase, ...rest } = ev
-      T_ = { ...T_, ...rest }
-      renderTests()
-      if (phase === 'end') {
-        toast(T_.code === 0 ? '✅ Tests réussis' : `❌ Tests en échec (code ${T_.code})`)
-        if (P.notify && document.hidden && 'Notification' in window && Notification.permission === 'granted')
-          new Notification(T_.code === 0 ? 'Tests réussis' : 'Tests en échec', { body: srv.name, tag: 'ide-for-claude-tests-' + srv.name })
+    if (ev.type === 'run') {
+      if (ev.phase === 'out') {
+        if (view.kind === 'run' && view.id === ev.id) appendRunOut(ev.text)
+        return
       }
+      if (ev.phase === 'forget') runs.delete(ev.id)
+      else runs.set(ev.run.id, ev.run)
+      if (ev.phase === 'end' && ev.run.code !== 0 && !ev.run.stopped) toast(`❌ « ${ev.run.name} » s'est arrêté (code ${ev.run.code})`)
+      if (ev.phase === 'end' && view.kind === 'run' && view.id === ev.run.id) {
+        const [, label] = runState(ev.run)
+        appendRunOut(`\n— ${label} —\n`)
+      }
+      return renderRuns()
+    }
+    if (ev.type === 'config') {
+      config = { rows: ev.rows || [], files: ev.files || {} }
+      if ($('settings').classList.contains('show') && setTab === 'claude') renderSettings()
+      return
+    }
+    if (ev.type === 'status') {
+      srv.status = ev.status
+      return renderStatus()
+    }
+    if (ev.type === 'annotation') {
+      toast('📍 Claude a posé une annotation')
       return
     }
     if (ev.type === 'activity') {
@@ -1073,7 +1638,7 @@ function beep() {
   } catch {}
 }
 function notifyDone() {
-  beep()
+  if (P.sound !== false) beep()
   if ('Notification' in window && Notification.permission === 'granted' && document.hidden)
     new Notification('Claude a terminé', { body: srv.name, tag: 'ide-for-claude-' + srv.name })
   if (document.hidden) {
@@ -1095,7 +1660,8 @@ require.config({ paths: { vs: CDN + '/vs' } })
 require(['vs/editor/editor.main'], async () => {
   monaco = window.monaco
   const dark = matchMedia('(prefers-color-scheme: dark)')
-  const theme = () => monaco.editor.setTheme(dark.matches ? 'vs-dark' : 'vs')
+  // le thème suit le système, sauf si les réglages de l'éditeur en imposent un
+  const theme = () => applyTheme()
   theme()
   dark.addEventListener('change', theme)
   const common = { automaticLayout: true, fontSize: 13, minimap: { enabled: false }, scrollBeyondLastLine: false, glyphMargin: true }
@@ -1109,15 +1675,41 @@ require(['vs/editor/editor.main'], async () => {
     const bucket = ed === editor ? 'ed' : 'diff'
     ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => save())
     ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyP, () => quickOpen())
+    const selected = (e) => {
+      const sel = e.getSelection()
+      const m = e.getModel()
+      if (!sel || !m || !cur) return null
+      const s = sel.isEmpty() ? new monaco.Range(sel.startLineNumber, 1, sel.startLineNumber, m.getLineMaxColumn(sel.startLineNumber)) : sel
+      // une sélection qui finit en début de ligne n'inclut pas cette ligne
+      const end = s.endColumn === 1 && s.endLineNumber > s.startLineNumber ? s.endLineNumber - 1 : s.endLineNumber
+      return { path: cur, line: s.startLineNumber, endLine: end, code: m.getValueInRange(s) }
+    }
     ed.addAction({
-      id: 'mi.send', label: '📎 Joindre la sélection pour Claude', contextMenuGroupId: 'navigation', contextMenuOrder: 0,
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyL],
+      id: 'mi.prompt', label: '✍ Joindre la sélection au prompt', contextMenuGroupId: 'navigation', contextMenuOrder: 0,
+      // Cmd+L, et la vraie touche Ctrl+L : sur Mac, Chrome peut garder Cmd+L pour sa barre d'adresse
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyL, monaco.KeyMod.WinCtrl | monaco.KeyCode.KeyL],
       run: (e) => {
-        const sel = e.getSelection()
-        const m = e.getModel()
-        if (!sel || !m) return
-        const s = sel.isEmpty() ? new monaco.Range(sel.startLineNumber, 1, sel.startLineNumber, m.getLineMaxColumn(sel.startLineNumber)) : sel
-        event({ type: 'selection', path: cur, startLine: s.startLineNumber, endLine: s.endLineNumber, code: m.getValueInRange(s) })
+        const x = selected(e)
+        if (!x) return
+        insertInPrompt(`@${rel(x.path)}:${x.line}${x.endLine !== x.line ? '-' + x.endLine : ''} `)
+      },
+    })
+    ed.addAction({
+      id: 'mi.idea', label: '💡 Nouvelle idée depuis la sélection', contextMenuGroupId: 'navigation', contextMenuOrder: 0.5,
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyI],
+      run: (e) => {
+        const x = selected(e)
+        if (!x) return
+        setIdeaFrom(x)
+        showPanel('ideas')
+        $('ideaText').focus()
+      },
+    })
+    ed.addAction({
+      id: 'mi.send', label: '📎 Joindre la sélection à la revue', contextMenuGroupId: 'navigation', contextMenuOrder: 0.8,
+      run: (e) => {
+        const x = selected(e)
+        if (x) event({ type: 'selection', path: x.path, startLine: x.line, endLine: x.endLine, code: x.code })
       },
     })
     ed.addAction({
@@ -1150,6 +1742,55 @@ require(['vs/editor/editor.main'], async () => {
     ed.onDidScrollChange(() => savePrefs())
   }
 
+  // ---------- l'éditeur de prompt ----------
+  promptEd = monaco.editor.create($('promptEd'), {
+    value: '', language: 'markdown', automaticLayout: true, minimap: { enabled: false }, lineNumbers: 'off', glyphMargin: false,
+    folding: false, lineDecorationsWidth: 6, lineNumbersMinChars: 0, wordWrap: 'on', scrollBeyondLastLine: false,
+    renderLineHighlight: 'none', overviewRulerLanes: 0, hideCursorInOverviewRuler: true, fontSize: 13,
+    scrollbar: { vertical: 'auto', horizontal: 'hidden' }, suggest: { showWords: false }, quickSuggestions: false, wordBasedSuggestions: 'off',
+  })
+  const promptModel = promptEd.getModel()
+  promptEd.onDidFocusEditorWidget(() => $('promptEd').classList.add('focus'))
+  promptEd.onDidBlurEditorWidget(() => $('promptEd').classList.remove('focus'))
+  promptEd.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => sendPrompt())
+  // ↑ ↓ : prompts précédents, quand le curseur est sur la première (ou dernière) ligne
+  const atTop = promptEd.createContextKey('miAtTop', true)
+  const atBottom = promptEd.createContextKey('miAtBottom', true)
+  promptEd.onDidChangeCursorPosition((e) => {
+    atTop.set(e.position.lineNumber === 1)
+    atBottom.set(e.position.lineNumber === promptModel.getLineCount())
+  })
+  promptEd.addCommand(monaco.KeyCode.UpArrow, () => { if (!historyStep(1)) promptEd.trigger('mi', 'cursorUp', null) }, 'miAtTop && !suggestWidgetVisible')
+  promptEd.addCommand(monaco.KeyCode.DownArrow, () => { if (hIdx < 0 || !historyStep(-1)) promptEd.trigger('mi', 'cursorDown', null) }, 'miAtBottom && !suggestWidgetVisible')
+  // brouillon : gardé avec les préférences du projet
+  promptModel.onDidChangeContent(() => {
+    if (hIdx !== -1) return
+    clearTimeout(draftTimer)
+    // on vérifie encore au moment d'enregistrer : entre-temps, ↑ a pu afficher un ancien prompt
+    draftTimer = setTimeout(() => { if (hIdx === -1) { P.draft = promptEd.getValue(); savePrefs() } }, 600)
+  })
+  // @ fichiers, / commandes et skills, #i idées
+  monaco.languages.registerCompletionItemProvider('markdown', {
+    triggerCharacters: ['@', '/', '#'],
+    provideCompletionItems: async (model, position) => {
+      if (model !== promptModel) return { suggestions: [] }
+      const before = model.getValueInRange(new monaco.Range(position.lineNumber, 1, position.lineNumber, position.column))
+      const m = before.match(/(?:^|\s)([@/#])([^\s]*)$/)
+      if (!m) return { suggestions: [] }
+      const range = new monaco.Range(position.lineNumber, position.column - m[2].length - 1, position.lineNumber, position.column)
+      const K = monaco.languages.CompletionItemKind
+      if (m[1] === '@') {
+        const list = await projectFiles()
+        return { suggestions: list.slice(0, 5000).map((f) => ({ label: '@' + f.rel, kind: K.File, insertText: '@' + f.rel + ' ', filterText: '@' + f.rel, range })) }
+      }
+      if (m[1] === '/') {
+        return { suggestions: (srv.commands || []).map((c) => ({ label: '/' + c.name, kind: c.source === 'builtin' ? K.Keyword : K.Function, detail: c.source, documentation: c.description, insertText: '/' + c.name + ' ', range })) }
+      }
+      const ideas = ((srv.project && srv.project.ideas) || []).filter((i) => i.status !== 'done')
+      return { suggestions: ideas.map((i) => ({ label: `#i${i.n}`, kind: K.Reference, detail: i.text.slice(0, 80), documentation: i.text, insertText: `#i${i.n} `, filterText: `#i${i.n} ${i.text}`, range })) }
+    },
+  })
+
   // boutons
   $('save').onclick = () => save()
   $('reload').onclick = () => cur && openFile(cur, { keepView: true })
@@ -1172,11 +1813,36 @@ require(['vs/editor/editor.main'], async () => {
   }
   for (const b of $('sideTabs').children) b.onclick = () => showPanel(b.dataset.p)
   $('allOk').onclick = () => acceptEverything()
-  $('testsRun').onclick = () => runTests()
-  $('testsStop').onclick = () => api('/api/tests/stop', { method: 'POST' })
-  $('testsSend').onclick = () => sendTests()
-  $('testsCmd').onkeydown = (e) => { if (e.key === 'Enter') runTests() }
-  $('testsCmd').onchange = () => { P.testCmd = $('testsCmd').value.trim(); savePrefs() }
+  // exécuteur de commandes
+  $('runGo').onclick = () => runCommand($('runCmd').value)
+  $('runCmd').onkeydown = (e) => { if (e.key === 'Enter') runCommand($('runCmd').value) }
+  $('runSave').onclick = () => { editingCmd = null; $('saveForm').hidden = false; $('saveName').focus() }
+  $('saveOk').onclick = () => saveCommand()
+  $('saveName').onkeydown = (e) => { if (e.key === 'Enter') saveCommand(); if (e.key === 'Escape') $('saveForm').hidden = true }
+  $('saveNo').onclick = () => { editingCmd = null; $('saveForm').hidden = true }
+  $('runStop').onclick = () => stopRun(view.id)
+  $('runAgain').onclick = () => { const r = runs.get(view.id); if (r) runCommand(r.command, r.name) }
+  $('runAttach').onclick = () => attachRun()
+  $('runFollow').onclick = () => { $('runFollow').classList.toggle('on'); if ($('runFollow').classList.contains('on')) $('runOut').scrollTop = $('runOut').scrollHeight }
+  $('runClose').onclick = () => { view = { kind: 'file' }; if (cur) openFile(cur); else show(null) }
+  // boîte à idées
+  $('ideaAdd').onclick = () => addIdea()
+  $('ideaText').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addIdea() } }
+  // paramètres et barre d'état
+  $('setBtn').onclick = () => openSettings()
+  $('setClose').onclick = () => closeSettings()
+  $('settings').addEventListener('mousedown', (e) => { if (e.target === $('settings')) closeSettings() })
+  $('statusline').onclick = () => openSettings('ide')
+  $('plan').addEventListener('toggle', () => { if (P.planOpen !== $('plan').open) { P.planOpen = $('plan').open; savePrefs() } })
+  $('promptSend').onclick = () => sendPrompt()
+  // hauteur de la zone de prompt
+  $('dockSplit').addEventListener('mousedown', (e) => {
+    e.preventDefault()
+    const move = (ev) => { P.dock = Math.max(48, Math.min(innerHeight * 0.6, $('promptEd').getBoundingClientRect().bottom - ev.clientY)); document.getElementById('app').style.setProperty('--dock', P.dock + 'px') }
+    const up = () => { removeEventListener('mousemove', move); removeEventListener('mouseup', up); savePrefs() }
+    addEventListener('mousemove', move)
+    addEventListener('mouseup', up)
+  })
   $('qoBtn').onclick = () => quickOpen()
   $('notifBtn').onclick = async () => {
     P.notify = !P.notify
@@ -1213,7 +1879,7 @@ require(['vs/editor/editor.main'], async () => {
     if (mod && !e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); save() }
     if (mod && !e.shiftKey && e.key.toLowerCase() === 'p') { e.preventDefault(); quickOpen() }
     if (mod && e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); showPanel('search'); $('q').focus(); $('q').select() }
-    if (e.key === 'Escape') { closeQo() }
+    if (e.key === 'Escape') { closeQo(); closeSettings() }
   }, true)
   window.addEventListener('beforeunload', (e) => {
     rememberView()

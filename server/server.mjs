@@ -41,6 +41,9 @@ let history = []
 let review = []
 let accepted = []
 let prefs = null
+/** le reste de l'état de la session (idées, annotations, commandes, file, plan, barre d'état, réglages) */
+let extra = {}
+const EXTRA = ['project', 'queue', 'plan', 'busy', 'status', 'ide', 'editor', 'commands']
 
 const clients = new Set()
 const watched = new Set()
@@ -224,46 +227,58 @@ const search = async (q, matchCase) => {
   return results
 }
 
-// ---------- tests ----------
-// La commande vient de la page (préférences du projet) et tourne dans le shell du système,
-// à la racine du projet. Un seul lancement à la fois ; la sortie part en direct dans la page.
+// ---------- exécuteur de commandes ----------
+// Chaque lancement tourne dans le shell du système, à la racine du projet, sans limite de durée
+// (un serveur de dev doit pouvoir tourner) ; sa sortie part en direct dans la page.
 const MAX_OUT = 1_000_000
-const TESTS_TIMEOUT = 15 * 60_000
-const tests = { running: false, command: '', started: 0, ended: 0, code: null, out: '', child: null, timer: null }
-const testsState = () => ({
-  running: tests.running,
-  command: tests.command,
-  started: tests.started,
-  ended: tests.ended,
-  code: tests.code,
-  out: tests.out,
+const MAX_RUNS = 30
+/** id -> { id, name, command, started, ended, code, out, child } */
+const runs = new Map()
+let runSeq = 0
+const runInfo = (r, withOut = false) => ({
+  id: r.id,
+  name: r.name,
+  command: r.command,
+  started: r.started,
+  ended: r.ended,
+  code: r.code,
+  stopped: !!r.stopped,
+  running: !r.ended,
+  ...(withOut ? { out: r.out } : { tail: r.out.slice(-2000) }),
 })
+const runsState = () => [...runs.values()].map((r) => runInfo(r))
 // les couleurs des terminaux n'ont rien à faire dans la page
 const stripAnsi = (t) => t.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').replace(/\x1b\][^\x07]*\x07/g, '')
 
 const exists = (f) => fs.access(path.join(ROOT, f)).then(() => true, () => false)
-async function suggestTests() {
-  const pkg = await fs.readFile(path.join(ROOT, 'package.json'), 'utf8').then(JSON.parse, () => null)
-  if (pkg?.scripts?.test && !/no test specified/.test(pkg.scripts.test)) {
-    if (await exists('pnpm-lock.yaml')) return 'pnpm test'
-    if (await exists('yarn.lock')) return 'yarn test'
-    if ((await exists('bun.lockb')) || (await exists('bun.lock'))) return 'bun test'
-    return 'npm test'
+/** des commandes à proposer : scripts de package.json, tests détectés, cibles du Makefile */
+async function suggestions() {
+  const out = []
+  // un package.json abîmé ne doit pas casser l'onglet : pas de suggestions de scripts, c'est tout
+  const pkg = await fs.readFile(path.join(ROOT, 'package.json'), 'utf8').then((t) => JSON.parse(t)).catch(() => null)
+  if (pkg?.scripts && typeof pkg.scripts === 'object') {
+    const pm = (await exists('pnpm-lock.yaml')) ? 'pnpm' : (await exists('yarn.lock')) ? 'yarn' : (await exists('bun.lockb')) || (await exists('bun.lock')) ? 'bun' : 'npm'
+    for (const name of Object.keys(pkg.scripts)) {
+      if (name === 'test' && /no test specified/.test(pkg.scripts.test)) continue
+      out.push({ name, command: pm === 'npm' && (name === 'test' || name === 'start') ? `npm ${name}` : `${pm} run ${name}` })
+    }
   }
-  if ((await exists('.claude-plugin/plugin.json')) && (await exists('tests'))) return 'claude plugin test .'
-  if (await exists('Cargo.toml')) return 'cargo test'
-  if (await exists('go.mod')) return 'go test ./...'
-  if ((await exists('pytest.ini')) || (await exists('pyproject.toml')) || (await exists('setup.py'))) return 'pytest'
-  if (await exists('Makefile')) {
-    const mk = await fs.readFile(path.join(ROOT, 'Makefile'), 'utf8').catch(() => '')
-    if (/^test:/m.test(mk)) return 'make test'
-  }
-  return ''
+  if ((await exists('.claude-plugin/plugin.json')) && (await exists('tests'))) out.push({ name: 'tests de la mod', command: 'claude plugin test .' })
+  if (await exists('Cargo.toml')) out.push({ name: 'cargo test', command: 'cargo test' }, { name: 'cargo run', command: 'cargo run' })
+  if (await exists('go.mod')) out.push({ name: 'go test', command: 'go test ./...' })
+  if ((await exists('pytest.ini')) || (await exists('pyproject.toml')) || (await exists('setup.py'))) out.push({ name: 'pytest', command: 'pytest' })
+  const mk = await fs.readFile(path.join(ROOT, 'Makefile'), 'utf8').catch(() => '')
+  for (const m of mk.matchAll(/^([a-zA-Z][\w-]*):(?!=)/gm)) out.push({ name: `make ${m[1]}`, command: `make ${m[1]}` })
+  return out.slice(0, 40)
 }
 
-function runTests(command) {
-  Object.assign(tests, { running: true, command, started: Date.now(), ended: 0, code: null, out: '' })
-  send({ type: 'tests', phase: 'start', ...testsState() })
+function startRun(command, name) {
+  // on ne garde que les derniers lancements terminés
+  const done = [...runs.values()].filter((r) => r.ended)
+  while (runs.size >= MAX_RUNS && done.length) runs.delete(done.shift().id)
+  const r = { id: String(++runSeq), name: name || command, command, started: Date.now(), ended: 0, code: null, out: '', child: null }
+  runs.set(r.id, r)
+  send({ type: 'run', phase: 'start', run: runInfo(r) })
   const child = spawn(command, {
     cwd: ROOT,
     shell: true,
@@ -271,34 +286,31 @@ function runTests(command) {
     env: { ...process.env, CI: '1', FORCE_COLOR: '0', NO_COLOR: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
-  tests.child = child
+  r.child = child
   const onData = (buf) => {
     const text = stripAnsi(buf.toString('utf8'))
-    tests.out = (tests.out + text).slice(-MAX_OUT)
-    send({ type: 'tests', phase: 'out', text })
+    r.out = (r.out + text).slice(-MAX_OUT)
+    send({ type: 'run', phase: 'out', id: r.id, text })
   }
   child.stdout.on('data', onData)
   child.stderr.on('data', onData)
-  const done = (code) => {
-    if (!tests.running) return
-    clearTimeout(tests.timer)
-    Object.assign(tests, { running: false, ended: Date.now(), code, child: null })
-    send({ type: 'tests', phase: 'end', ...testsState() })
+  const done2 = (code) => {
+    if (r.ended) return
+    Object.assign(r, { ended: Date.now(), code, child: null })
+    send({ type: 'run', phase: 'end', run: runInfo(r) })
   }
   child.on('error', (e) => {
     onData(Buffer.from(`\n${e.message}\n`))
-    done(-1)
+    done2(-1)
   })
-  child.on('close', (code, signal) => done(code ?? (signal ? -1 : 0)))
-  tests.timer = setTimeout(() => {
-    onData(Buffer.from('\n⏱️ Arrêtés après 15 minutes.\n'))
-    stopTests()
-  }, TESTS_TIMEOUT)
+  child.on('close', (code, signal) => done2(code ?? (signal ? -1 : 0)))
+  return r
 }
 
-function stopTests() {
-  const child = tests.child
+function stopRun(r) {
+  const child = r?.child
   if (!child) return
+  r.stopped = true
   try {
     // tout le groupe : npm lance souvent d'autres processus sous lui
     if (process.platform === 'win32') execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'])
@@ -306,6 +318,9 @@ function stopTests() {
   } catch {
     child.kill('SIGTERM')
   }
+}
+const stopAll = () => {
+  for (const r of runs.values()) stopRun(r)
 }
 
 // ---------- serveur ----------
@@ -333,11 +348,12 @@ const server = http.createServer(async (req, res) => {
         name: NAME,
         sep: path.sep,
         changes: [...changes.keys()].map((p) => ({ path: p, rel: rel(p), agent: agents.get(p) ?? null })),
-        tests: testsState(),
         history: historyMeta(),
         review,
         accepted,
         prefs,
+        ...extra,
+        runs: runsState(),
       })
 
     if (route === 'GET /api/tree') {
@@ -436,6 +452,7 @@ const server = http.createServer(async (req, res) => {
       review = Array.isArray(s.review) ? s.review : review
       accepted = Array.isArray(s.accepted) ? s.accepted : accepted
       if (s.prefs !== undefined) prefs = s.prefs
+      for (const k of EXTRA) if (s[k] !== undefined) extra[k] = s[k]
       for (const p of changes.keys()) watch(p)
       send({ type: 'state' })
       return json(res, 200, { ok: true })
@@ -450,25 +467,39 @@ const server = http.createServer(async (req, res) => {
     // une nouvelle copie de la mod reprend la session : elle arrête ce serveur pour reprendre son port
     if (route === 'POST /api/quit') {
       json(res, 200, { ok: true })
-      stopTests()
+      stopAll()
       server.close()
       for (const r of clients) r.destroy()
       setTimeout(() => process.exit(0), 50)
       return
     }
 
-    if (route === 'GET /api/tests') return json(res, 200, { ...testsState(), suggested: await suggestTests() })
+    if (route === 'GET /api/runs') return json(res, 200, { runs: runsState(), suggestions: await suggestions() })
 
-    if (route === 'POST /api/tests/run') {
-      const { command } = await body(req)
+    if (route === 'GET /api/run') {
+      const r = runs.get(q('id') ?? '')
+      return r ? json(res, 200, runInfo(r, true)) : json(res, 404, { error: 'introuvable' })
+    }
+
+    if (route === 'POST /api/run') {
+      const { command, name } = await body(req)
       if (typeof command !== 'string' || !command.trim()) return json(res, 400, { error: 'commande vide' })
-      if (tests.running) return json(res, 409, { error: 'des tests tournent déjà' })
-      runTests(command.trim())
+      const r = startRun(command.trim(), typeof name === 'string' ? name.trim() : '')
+      return json(res, 200, runInfo(r))
+    }
+
+    if (route === 'POST /api/run/stop') {
+      const { id } = await body(req)
+      stopRun(runs.get(String(id)))
       return json(res, 200, { ok: true })
     }
 
-    if (route === 'POST /api/tests/stop') {
-      stopTests()
+    if (route === 'POST /api/run/forget') {
+      const { id } = await body(req)
+      const r = runs.get(String(id))
+      if (r && !r.ended) return json(res, 409, { error: 'encore en cours' })
+      runs.delete(String(id))
+      send({ type: 'run', phase: 'forget', id: String(id) })
       return json(res, 200, { ok: true })
     }
 
@@ -496,7 +527,7 @@ setInterval(() => {
   try {
     process.kill(parent, 0)
   } catch {
-    stopTests()
+    stopAll()
     process.exit(0)
   }
 }, 5_000).unref()
@@ -526,7 +557,7 @@ console.log(JSON.stringify({ port: PORT }))
 
 for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP'])
   process.on(sig, () => {
-    stopTests()
+    stopAll()
     for (const p of watched) unwatchFile(p)
     process.exit(0)
   })
