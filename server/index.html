@@ -265,6 +265,90 @@
   #toasts { position: fixed; right: 16px; bottom: 40px; display: flex; flex-direction: column; gap: 8px; z-index: 60; }
   .toast { background: var(--text); color: var(--bg); padding: 8px 12px; border-radius: 8px; box-shadow: var(--shadow); animation: fade .2s; }
   @keyframes fade { from { opacity: 0; transform: translateY(6px); } }
+
+  /* onglet fixe de la conversation : toujours à gauche, même quand les onglets défilent */
+  .tab.fixed { position: sticky; left: 0; z-index: 2; background: var(--panel); font-weight: 500; border-right: 1px solid var(--border); }
+  .tab.fixed.cur { background: var(--bg); }
+  .tab.fixed .unread { color: var(--accent); font-size: 10px; }
+  /* la conversation */
+  #convView { display: flex; flex-direction: column; min-height: 0; }
+  #convBar { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-bottom: 1px solid var(--border); flex: none; }
+  #convList { flex: 1; overflow: auto; padding: 12px 0 24px; }
+  .msg { max-width: 900px; margin: 0 auto; padding: 4px 20px; }
+  .msg.ai.cont { padding-top: 0; padding-bottom: 0; }
+  .msg .who { font-size: 11px; font-weight: 600; color: var(--muted); margin: 10px 0 3px; text-transform: uppercase; letter-spacing: .04em; }
+  .msg.ai .who { color: var(--accent); }
+  .msg.user .bubble { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; white-space: pre-wrap; word-break: break-word; }
+  .msg.cmd .bubble { font: 12px ui-monospace, monospace; color: var(--muted); background: transparent; border-style: dashed; padding: 4px 10px; white-space: pre-wrap; }
+  .msg details.sum { border: 1px dashed var(--border); border-radius: 8px; padding: 4px 10px; color: var(--muted); }
+  .msg details.sum summary { cursor: pointer; }
+  .md { line-height: 1.55; word-break: break-word; }
+  .md > :first-child { margin-top: 0; } .md > :last-child { margin-bottom: 0; }
+  .md p { margin: 6px 0; } .md ul, .md ol { margin: 6px 0; padding-left: 22px; }
+  .md h1, .md h2, .md h3, .md h4 { margin: 12px 0 6px; line-height: 1.3; } .md h1 { font-size: 17px; } .md h2 { font-size: 15px; } .md h3, .md h4 { font-size: 13.5px; }
+  .md code { font: 12px ui-monospace, Menlo, monospace; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+  .md pre { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; overflow: auto; }
+  .md pre code { background: none; border: 0; padding: 0; font-size: 12px; line-height: 1.45; }
+  .md table { border-collapse: collapse; margin: 6px 0; display: block; overflow: auto; }
+  .md th, .md td { border: 1px solid var(--border); padding: 3px 8px; text-align: left; }
+  .md th { background: var(--panel); }
+  .md blockquote { margin: 6px 0; padding: 0 10px; border-left: 3px solid var(--border); color: var(--muted); }
+  .md a { color: var(--accent); }
+  .tools { margin: 2px 0; }
+  .tool { font-size: 12px; color: var(--muted); }
+  .tool summary { cursor: pointer; padding: 1px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; list-style: none; }
+  .tool summary::before { content: '▸ '; } .tool[open] summary::before { content: '▾ '; }
+  .tool summary:hover { color: var(--text); }
+  .md code.flink { cursor: pointer; text-decoration: underline dotted; } .md code.flink:hover { color: var(--accent); }
+  .tool.err summary { color: var(--bad); }
+  .tool pre { margin: 2px 0 6px 14px; padding: 6px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; font: 11.5px/1.4 ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow: auto; color: var(--text); }
+  #convView.notools .tools { display: none; }
+  .convBusy { max-width: 900px; margin: 10px auto 0; padding: 0 20px; color: var(--accent); }
+  .convEmpty { color: var(--muted); text-align: center; padding: 40px 20px; }
+  /* tableau de bord Claude Status */
+  #dash { padding-top: 5vh; }
+  #dash .card { width: min(1080px, 96vw); }
+  #dashBody { max-height: 80vh; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; padding: 14px; }
+  .dcard { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--bg); min-width: 0; }
+  .dcard.wide { grid-column: 1 / -1; }
+  .dcard h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); display: flex; gap: 6px; align-items: baseline; }
+  .dcard h3 .r { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .big { font-size: 26px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .big small { font-size: 13px; font-weight: 400; color: var(--muted); }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 12.5px; margin-top: 6px; }
+  .kv dt { color: var(--muted); } .kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meter { height: 8px; background: var(--hover); border-radius: 4px; overflow: hidden; margin: 6px 0 2px; }
+  .meter > i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+  .meter.warn > i { background: var(--warn); } .meter.bad > i { background: var(--bad); }
+  .lim { margin-bottom: 10px; } .lim .top { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; }
+  .lim .top b { font-variant-numeric: tabular-nums; margin-left: auto; white-space: nowrap; }
+  .lim .sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .stack { display: flex; gap: 2px; height: 14px; margin: 8px 0; }
+  .stack > i { display: block; height: 100%; min-width: 2px; }
+  .stack > i:first-child { border-radius: 4px 0 0 4px; } .stack > i:last-child { border-radius: 0 4px 4px 0; }
+  .legend2 { display: grid; grid-template-columns: 12px 1fr auto auto; gap: 3px 8px; font-size: 12px; align-items: center; }
+  .legend2 .sw { width: 10px; height: 10px; border-radius: 3px; }
+  .legend2 .v { text-align: right; font-variant-numeric: tabular-nums; } .legend2 .p { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; min-width: 38px; }
+  .dtable { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .dtable th { text-align: right; color: var(--muted); font-weight: 500; padding: 3px 6px; border-bottom: 1px solid var(--border); }
+  .dtable td { text-align: right; padding: 3px 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .dtable th:first-child, .dtable td:first-child { text-align: left; }
+  .dtable td.t { text-align: left; max-width: 380px; overflow: hidden; text-overflow: ellipsis; }
+  .dtable tr.me td { background: var(--accent-soft); }
+  .scroll { max-height: 260px; overflow: auto; }
+  .bars { display: flex; align-items: flex-end; gap: 2px; height: 110px; border-bottom: 1px solid var(--border); margin-top: 8px; position: relative; }
+  .bars > div { flex: 1; height: 100%; display: flex; align-items: flex-end; cursor: default; }
+  .bars > div > i { display: block; width: 100%; background: var(--accent); border-radius: 4px 4px 0 0; min-height: 1px; }
+  .bars > div:hover > i { filter: brightness(1.15); }
+  .bars .tip { position: absolute; top: -4px; transform: translate(-50%, -100%); background: var(--text); color: var(--bg); font-size: 11px; padding: 3px 6px; border-radius: 5px; white-space: nowrap; pointer-events: none; }
+  .axis { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); margin-top: 3px; }
+  .note { font-size: 11.5px; color: var(--muted); margin-top: 6px; line-height: 1.45; }
+  .plan { display: flex; gap: 6px; align-items: center; margin-top: 8px; font-size: 12px; }
+  .plan input { width: 90px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 3px 6px; }
+  .pill { white-space: nowrap; display: inline-block; font-size: 11px; border: 1px solid var(--border); border-radius: 10px; padding: 0 7px; color: var(--muted); }
+  .pill.good { color: var(--ok); border-color: var(--ok); } .pill.warn { color: var(--warn); border-color: var(--warn); } .pill.bad { color: var(--bad); border-color: var(--bad); }
+  :root { --c1: #2a78d6; --c2: #eb6834; --c3: #1baf7a; --c4: #eda100; --c5: #e87ba4; --c6: #008300; --c7: #6250d6; --c8: #e34948; --cfree: #d5d7da; }
+  @media (prefers-color-scheme: dark) { :root { --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500; --c5: #d55181; --c6: #008300; --c7: #9085e9; --c8: #e66767; --cfree: #3a3a3a; } }
   @media (max-width: 760px) { #app { --side: 0px !important; } aside, #split { display: none; } }
 </style>
 </head>
@@ -276,6 +360,7 @@
     <span class="spacer"></span>
     <button class="ghost okb" id="allOk" title="Valider tous les fichiers encore en revue, tous prompts confondus" hidden></button>
     <button class="ghost" id="qoBtn" title="Ouvrir un fichier">🔎 Ouvrir <kbd id="qoKey">Ctrl+P</kbd></button>
+    <button class="ghost" id="dashBtn" title="Claude Status : session, contexte, limites et coûts">📊 Claude Status</button>
     <button class="ghost" id="notifBtn" title="Notification quand Claude a fini">🔕</button>
     <button class="ghost" id="keysBtn" title="Raccourcis clavier">⌨️</button>
     <button class="ghost" id="setBtn" title="Paramètres">⚙️</button>
@@ -340,6 +425,13 @@
         <kbd class="lKey">Ctrl+L</kbd> mentionne la sélection dans le prompt, le <b>+</b> d'une ligne la commente.</div></div>
       <div id="ed" hidden></div>
       <div id="diff" hidden></div>
+      <div id="convView" hidden>
+        <div id="convBar"><b>💬 Conversation</b><span id="convCount" class="hint"></span><span class="spacer"></span>
+          <button id="convTools" title="Afficher les appels d'outils de Claude">🔧 Outils</button>
+          <button id="convFollow" class="on" title="Suivre la fin de la conversation">⇩ Suivre</button>
+          <button id="convReload" title="Recharger toute la conversation">↻</button></div>
+        <div id="convList"></div>
+      </div>
       <div id="runView" hidden>
         <div id="runBar"><b id="runName"></b><code id="runCmdShow"></code><span id="runSt" class="st"></span><span class="spacer"></span>
           <button id="runStop">■ Arrêter</button><button id="runAgain">↻ Relancer</button><button id="runAttach" title="Joindre la fin de la sortie à ton prochain prompt">📎 Pour Claude</button>
@@ -374,8 +466,12 @@
   <div class="acts"><span class="hint" id="setInfo" style="margin-right:auto"></span><button id="setClose" class="primary">Fermer</button></div></div></div>
 <div class="modal" id="keys"><div class="card"><div class="body" id="keysBody"></div>
   <div class="acts"><button id="keysEdit">⚙️ Personnaliser</button><button id="keysClose" class="primary">Fermer</button></div></div></div>
+<div class="modal" id="dash"><div class="card"><div class="body" id="dashBody"></div>
+  <div class="acts"><span class="hint" id="dashInfo" style="margin-right:auto"></span><button id="dashRefresh" title="Actualiser">↻ Actualiser</button><button id="dashClose" class="primary">Fermer</button></div></div></div>
 <div id="toasts"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
 <script>
 const CDN = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min'
@@ -415,7 +511,8 @@ let git = { repo: false, status: {} }
 const files = new Map()   // chemin -> { base, before, model, original }
 let tabs = []
 let cur = null
-let view = { kind: 'file' } // ou { kind: 'turn', id } / { kind: 'session' }
+let recent = []   // les fichiers du plus récemment consulté au plus ancien : où revenir quand on ferme l'onglet courant
+let view = { kind: 'file' } // ou { kind: 'turn', id } / { kind: 'session' } / { kind: 'run', id } / { kind: 'conv' }
 let P = { sideBySide: false, fold: true, side: 280, panel: 'files', notify: false, compare: 'claude', expanded: [], collapsed: [], views: {}, testCmd: '' }
 let prefsLoaded = false
 let monaco, editor, diff
@@ -559,6 +656,12 @@ function renderTabs() {
   const list = tabList()
   const box = $('tabs')
   box.replaceChildren()
+  // la conversation : un onglet fixe, toujours le premier, qu'on ne ferme pas
+  box.append(h('div', {
+    class: 'tab fixed' + (view.kind === 'conv' ? ' cur' : ''),
+    title: 'La conversation avec Claude Code' + (firstKey('conv.open') ? ` (${firstKey('conv.open')})` : ''),
+    onclick: () => openConv(),
+  }, '💬 Conversation', conv.unread && view.kind !== 'conv' ? h('span', { class: 'unread', title: 'Nouveaux messages' }, '●') : null))
   for (const p of list) {
     const f = files.get(p)
     const dirty = f && f.model && f.model.getValue() !== f.base
@@ -576,8 +679,19 @@ function renderTabs() {
   }
 }
 function closeTab(p) {
+  const before = tabList()
   tabs = tabs.filter((x) => x !== p)
-  if (cur === p) { cur = null; show(null) }
+  recent = recent.filter((x) => x !== p)
+  if (cur === p) {
+    // retour au dernier fichier consulté parmi ceux qui restent ouverts, sinon à l'onglet voisin
+    const left = tabList()
+    const next = recent.find((x) => left.includes(x)) || left[Math.min(Math.max(0, before.indexOf(p)), left.length - 1)] || null
+    cur = next
+    if (view.kind === 'file') {
+      if (next) { renderTabs(); savePrefs(); return void openFile(next) }
+      show(null)
+    }
+  }
   renderTabs()
   savePrefs()
 }
@@ -588,8 +702,9 @@ function show(kind) {
   $('ed').hidden = kind !== 'ed'
   $('diff').hidden = kind !== 'diff'
   $('runView').hidden = kind !== 'run'
-  $('bar').style.display = kind === 'run' ? 'none' : ''
-  if (kind === 'run') return
+  $('convView').hidden = kind !== 'conv'
+  $('bar').style.display = kind === 'run' || kind === 'conv' ? 'none' : ''
+  if (kind === 'run' || kind === 'conv') return
   const isFile = view.kind === 'file'
   const f = cur && files.get(cur)
   const claudeDiff = kind === 'diff' && isFile && P.compare === 'claude' && isChanged(cur)
@@ -622,6 +737,8 @@ async function openFile(p, { keepView = false, line = null } = {}) {
   let data
   try { data = await fetchFile(p) } catch (e) { status('⚠️ ' + e.message); return }
   view = { kind: 'file' }
+  recent = [p, ...recent.filter((x) => x !== p)].slice(0, 50)
+  if (P.onConv) { P.onConv = false; savePrefs() }
   setReadOnly(false)
   let f = files.get(p)
   const uri = monaco.Uri.file(p)
@@ -1519,6 +1636,8 @@ const KEYMAP = [
   ['search', 'Navigation', 'Rechercher dans le projet', ['Mod+Shift+F']],
   ['goto.line', 'Navigation', 'Aller à la ligne', ['Ctrl+G']],
   ['side.toggle', 'Navigation', 'Masquer ou afficher la barre latérale', ['Mod+B']],
+  ['conv.open', 'Navigation', 'Conversation (et retour au fichier)', [`${LK}+0`]],
+  ['dash.open', 'Navigation', 'Claude Status', [`${LK}+9`]],
   ...PANELS.map(([p, label], i) => [`panel.${p}`, 'Navigation', `Panneau ${label}`, [`${LK}+${i + 1}`]]),
   ['prompt.focus', 'Prompt et commandes', 'Aller dans l\'éditeur de prompt, et en revenir', ['Mod+K']],
   // sur Mac, Chrome garde souvent ⌘L pour sa barre d'adresse : ⌃L d'abord
@@ -1601,7 +1720,7 @@ const modalOpen = () => [...document.querySelectorAll('.modal.show')].map((m) =>
 
 function onShortcut(e) {
   if (recordingKey) return recordKey(e)
-  if (e.key === 'Escape') { closeQo(); closeSettings(); closeKeys() }
+  if (e.key === 'Escape') { closeQo(); closeSettings(); closeKeys(); closeDash() }
   const c = comboOf(e)
   if (!c) return
   const id = keyIndexNow().get(c)
@@ -1716,6 +1835,8 @@ function runShortcut(id) {
       if (view.kind !== 'file' || !cur) return false
       if (isChanged(cur)) return toast('Ce fichier est en revue : valide-le pour pouvoir fermer son onglet')
       return closeTab(cur)
+    case 'conv.open': return view.kind === 'conv' ? void (cur ? openFile(cur) : (view = { kind: 'file' }, show(null), renderTabs())) : openConv()
+    case 'dash.open': return $('dash').classList.contains('show') ? closeDash() : openDash()
     case 'file.open': return void quickOpen()
     case 'file.save': return void save()
     case 'search': { if (P.sideHidden) setSideHidden(false); showPanel('search'); $('q').focus(); $('q').select(); return }
@@ -2002,6 +2123,7 @@ async function refreshState() {
     }
     prefsLoaded = true
     applyLayoutPrefs()
+    applyConvTools()
   }
   await refreshGit()
   renderTabs()
@@ -2020,7 +2142,8 @@ async function refreshState() {
   const f = cur && files.get(cur)
   const busy = f && view.kind === 'file' && f.model.getValue() !== f.base
   const fresh = srv.changes.find((c) => !prev.has(c.path))
-  if (fresh && !busy && P.openChanged !== false && view.kind !== 'run' && document.readyState === 'complete' && started) return openFile(fresh.path)
+  if (view.kind === 'conv') renderConvBusy()
+  if (fresh && !busy && P.openChanged !== false && view.kind !== 'run' && view.kind !== 'conv' && document.readyState === 'complete' && started) return openFile(fresh.path)
   if (cur && view.kind === 'file' && !busy) {
     const had = f && f.before !== null && f.before !== undefined
     if (P.compare === 'claude' && isChanged(cur) !== had) return openFile(cur, { keepView: true })
@@ -2038,6 +2161,9 @@ function connect() {
     if (ev.type === 'state') return refreshState()
     if (ev.type === 'toast') return toast(ev.text)
     // le terminal n'a pas pu prendre le prompt : il revient dans l'éditeur
+    if (ev.type === 'conversation') return onConversation(ev)
+    if (ev.type === 'convChanged') return convChanged()
+    if (ev.type === 'dashboard') { dash.data = ev.data; if ($('dash').classList.contains('show')) renderDash(); return }
     if (ev.type === 'promptBack') { if (!promptEd.getValue().trim()) promptEd.setValue(ev.text || ''); return }
     if (ev.type === 'run') {
       if (ev.phase === 'out') {
@@ -2078,6 +2204,7 @@ function connect() {
       $('activity').className = 'idle'
       $('activity').textContent = '✅ Claude a terminé · ' + fmtTime(Date.now())
       if (P.notify) notifyDone()
+      if ($('dash').classList.contains('show')) event({ type: 'dashboard' })
       return
     }
     if (ev.type === 'restoreConflict') {
@@ -2093,6 +2220,288 @@ function connect() {
       refreshGit().then(renderTree)
     }
   }
+}
+
+// ---------- conversation : l'onglet fixe 💬 ----------
+const conv = { items: [], first: '', total: 0, loaded: false, unread: false, follow: true, timer: null, nodes: new Map(), busyEl: null }
+function openConv() {
+  if (view.kind === 'file' && cur) rememberView()
+  view = { kind: 'conv' }
+  show('conv')
+  conv.unread = false
+  if (!P.onConv) { P.onConv = true; savePrefs() }
+  renderTabs()
+  renderConv()
+  fetchConv(!conv.loaded)
+}
+/** demande à la mod la conversation : tout, ou à partir des derniers messages (leurs outils ont pu recevoir leur résultat) */
+function fetchConv(all = false) {
+  const from = all || !conv.items.length ? 0 : conv.items[Math.max(0, conv.items.length - 3)].i
+  event({ type: 'conversation', from })
+}
+function convChanged() {
+  if (view.kind !== 'conv') { if (!conv.unread) { conv.unread = true; renderTabs() } return }
+  clearTimeout(conv.timer)
+  conv.timer = setTimeout(() => fetchConv(), 300)
+}
+function onConversation(ev) {
+  const items = ev.items || []
+  // le début a changé (/clear, compactage) alors qu'on n'a reçu que la fin : on recharge tout
+  if (ev.from > 0 && ev.first !== conv.first) return fetchConv(true)
+  conv.items = ev.from === 0 ? items : [...conv.items.filter((x) => x.i < ev.from), ...items]
+  conv.first = ev.first
+  conv.total = ev.total
+  conv.loaded = true
+  if (view.kind === 'conv') renderConv()
+}
+/** le markdown de Claude, nettoyé ; les chemins de fichiers du projet s'ouvrent d'un clic */
+function md(text) {
+  const el = h('div', { class: 'md' })
+  if (!window.marked || !window.DOMPurify) { el.style.whiteSpace = 'pre-wrap'; el.textContent = text; return el }
+  el.innerHTML = DOMPurify.sanitize(marked.parse(text, { gfm: true }))
+  for (const a of el.querySelectorAll('a')) { a.target = '_blank'; a.rel = 'noopener' }
+  for (const c of el.querySelectorAll('pre code')) colorizeCode(c)
+  for (const c of el.querySelectorAll(':not(pre) > code')) {
+    const m = c.textContent.match(/^([\w@.\/-]+\.[\w]+)(?::(\d+)(?:-\d+)?)?$/)
+    if (!m) continue
+    const p = m[1].startsWith('/') ? m[1] : srv.root + srv.sep + m[1]
+    c.classList.add('flink')
+    c.title = 'Ouvrir ' + m[1] + (m[2] ? ' à la ligne ' + m[2] : '')
+    c.onclick = () => openFile(p, { line: m[2] ? Number(m[2]) : null })
+  }
+  return el
+}
+function colorizeCode(el) {
+  const m = (el.className || '').match(/language-([\w+-]+)/)
+  if (!m || !monaco) return
+  const id = LANG[m[1].toLowerCase()] || m[1].toLowerCase()
+  if (!monaco.languages.getLanguages().some((l) => l.id === id)) return
+  monaco.editor.colorize(el.textContent, id, { tabSize: 2 }).then((html) => { el.innerHTML = html }).catch(() => {})
+}
+function convNode(x, prevRole) {
+  if (x.role === 'user') {
+    if (x.kind === 'summary') return h('div', { class: 'msg user' }, h('details', { class: 'sum' }, h('summary', {}, '📦 Résumé du compactage de la conversation'), md(x.text)))
+    if (x.kind === 'command') return h('div', { class: 'msg user cmd' }, h('div', { class: 'bubble' }, x.text))
+    return h('div', { class: 'msg user' }, h('div', { class: 'who' }, 'Toi'), h('div', { class: 'bubble' }, x.text))
+  }
+  return h('div', { class: 'msg ai' + (prevRole === 'assistant' ? ' cont' : '') },
+    prevRole === 'assistant' ? null : h('div', { class: 'who' }, 'Claude'),
+    x.text ? md(x.text) : null,
+    x.tools ? h('div', { class: 'tools' }, x.tools.map((t) => h('details', { class: 'tool' + (t.isError ? ' err' : '') },
+      h('summary', { title: t.label }, (t.isError ? '❌ ' : '') + t.label),
+      t.out ? h('pre', {}, t.out) : h('pre', {}, t.isError ? 'Erreur' : '…')))) : null)
+}
+function renderConv() {
+  const follow = conv.follow
+  const nodes = new Map()
+  const out = []
+  let prev = null
+  for (const x of conv.items) {
+    // un message déjà affiché et inchangé garde son élément (et ses outils dépliés)
+    const key = x.i + (x.role === 'assistant' && prev === 'assistant' ? 'c' : '') + ':' + hash(JSON.stringify(x))
+    const n = conv.nodes.get(key) || convNode(x, prev)
+    nodes.set(key, n)
+    out.push(n)
+    prev = x.role
+  }
+  conv.nodes = nodes
+  if (!conv.loaded) out.push(h('div', { class: 'convEmpty' }, 'Chargement de la conversation…'))
+  else if (!conv.items.length) out.push(h('div', { class: 'convEmpty' }, 'Pas encore de message. Écris ton prompt en bas : la conversation s\'affiche ici.'))
+  out.push(conv.busyEl || (conv.busyEl = h('div', { class: 'convBusy' })))
+  $('convList').replaceChildren(...out)
+  renderConvBusy()
+  const prompts = conv.items.filter((x) => x.role === 'user' && !x.kind).length
+  $('convCount').textContent = conv.loaded ? `${prompts} prompt${prompts > 1 ? 's' : ''} · ${conv.items.length} messages` : ''
+  if (follow) convToEnd()
+}
+function renderConvBusy() {
+  if (!conv.busyEl) return
+  conv.busyEl.hidden = !srv.busy
+  conv.busyEl.replaceChildren(h('span', { class: 'spin' }, '◐'), ' Claude travaille…')
+}
+function convToEnd() { const l = $('convList'); l.scrollTop = l.scrollHeight }
+function applyConvTools() {
+  $('convView').classList.toggle('notools', P.convTools === false)
+  $('convTools').classList.toggle('on', P.convTools !== false)
+}
+
+// ---------- 📊 Claude Status : session, contexte, limites, coûts ----------
+const dash = { data: null, timer: null }
+function openDash() {
+  $('dash').classList.add('show')
+  renderDash()
+  event({ type: 'dashboard' })
+  clearInterval(dash.timer)
+  dash.timer = setInterval(() => { if (!document.hidden) event({ type: 'dashboard' }) }, 15000)
+}
+function closeDash() { $('dash').classList.remove('show'); clearInterval(dash.timer) }
+
+const fmtUsd = (v) => (v === null || v === undefined || !isFinite(v) ? '—' : v > 0 && v < 0.01 ? '< 0.01 $' : v >= 1000 ? `${Math.round(v).toLocaleString()} $` : `${v.toFixed(2)} $`)
+const fmtTok = (n) => (n === null || n === undefined ? '—' : n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)} M` : n >= 1e3 ? `${(n / 1e3).toFixed(n >= 1e5 ? 0 : 1)} k` : String(n))
+function fmtDur(ms) {
+  if (ms === null || ms === undefined || !isFinite(ms)) return '—'
+  if (ms < 60000) return `${Math.max(0, Math.round(ms / 1000))} s`
+  const m = Math.round(ms / 60000)
+  if (m < 60) return `${m} min`
+  const hh = Math.floor(m / 60)
+  return hh < 48 ? `${hh} h ${String(m % 60).padStart(2, '0')}` : `${Math.floor(hh / 24)} j ${hh % 24} h`
+}
+const fmtDate = (ms) => new Date(ms).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+function modelLabel(id) {
+  const m = String(id || '').replace(/\[.*\]$/, '').match(/^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-|$)/)
+  return m ? `${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}${m[3] ? '.' + m[3] : ''}` : String(id || '—')
+}
+const CAT_FR = {
+  'System prompt': 'Prompt système', 'System tools': 'Outils système', 'MCP tools': 'Outils MCP', 'Custom agents': 'Agents',
+  'Memory files': 'Fichiers de mémoire', Skills: 'Skills', Messages: 'Messages', 'Free space': 'Espace libre',
+  'Autocompact buffer': 'Réserve de compactage', 'Slash commands': 'Commandes',
+}
+const LIMITS = { five_hour: ['Fenêtre de 5 heures', 5 * 3600e3], seven_day: ['Fenêtre de 7 jours', 7 * 86400e3], seven_day_opus: ['7 jours (Opus)', 7 * 86400e3], seven_day_sonnet: ['7 jours (Sonnet)', 7 * 86400e3], spend_limit: ['Plafond de dépense', 0] }
+
+function renderDash() {
+  const body = $('dashBody')
+  const d = dash.data
+  if (!d) { body.replaceChildren(h('div', { class: 'hint' }, 'Chargement…')); $('dashInfo').textContent = ''; return }
+  $('dashInfo').textContent = `Mis à jour à ${fmtTime(d.at)} · actualisé toutes les 15 s`
+  const s = d.session, c = d.context, me = d.current, pr = d.project
+  const card = (title, right, ...kids) => h('div', { class: 'dcard' }, h('h3', {}, title, right ? h('span', { class: 'r' }, right) : null), ...kids)
+  const kv = (...rows) => h('dl', { class: 'kv' }, rows.filter(Boolean).flatMap(([k, v]) => [h('dt', {}, k), h('dd', { title: String(v) }, String(v))]))
+  const meter = (pct, cls = '') => h('div', { class: 'meter ' + cls, role: 'meter', 'aria-valuenow': pct ?? 0, 'aria-valuemin': 0, 'aria-valuemax': 100 }, h('i', { style: `width:${Math.min(100, Math.max(0, pct || 0))}%` }))
+  const note = (t) => h('div', { class: 'note' }, t)
+  const pill = (cls, t) => h('span', { class: 'pill ' + cls }, t)
+  const isSub = d.limits.length > 0 || /claude\.?ai|subscription|oauth/i.test(s.account || '')
+  const planPrice = srv.ide && srv.ide.planPrice ? srv.ide.planPrice : d.planPrice
+
+  // session
+  const session = card('🧠 Session', null,
+    h('div', { class: 'big' }, modelLabel(s.model), ' ', h('small', {}, s.effort ? `effort ${s.effort}` : '')),
+    kv(
+      me.title && ['Titre', me.title],
+      ['Début', me.start ? fmtDate(me.start) : '—'],
+      me.start && ['Durée', fmtDur(d.at - me.start)],
+      ['Prompts', s.turns ?? '—'],
+      ['Fichiers modifiés', s.changedFiles ?? '—'],
+      me.linesAdded !== undefined && ['Lignes', `+${me.linesAdded} / −${me.linesRemoved}`],
+      me.apiMs !== undefined && ['Temps de réponse de l\'API', fmtDur(me.apiMs)],
+      me.toolMs !== undefined && ['Temps des outils', fmtDur(me.toolMs)],
+      ['Claude Code', s.version || '—'],
+      ['Compte', [isSub ? 'abonnement' : 'clé API ou fournisseur', s.plan].filter(Boolean).join(' · ')],
+      ['Identifiant', s.id || '—'],
+    ))
+
+  // contexte
+  const pct = c.percent ?? (c.tokens && c.window ? Math.round((100 * c.tokens) / c.window) : null)
+  const cats = (c.categories || []).filter((x) => x.kind !== 'deferred' && x.tokens > 0)
+  const catSum = cats.reduce((a, x) => a + x.tokens, 0) || 1
+  let slot = 0
+  const colored = cats.map((x) => ({ ...x, fill: x.kind === 'free' ? 'var(--cfree)' : x.kind === 'buffer' ? 'repeating-linear-gradient(45deg, var(--cfree) 0 3px, transparent 3px 6px)' : `var(--c${Math.min(8, ++slot)})` }))
+  const context = card('📚 Contexte', c.window ? `fenêtre de ${fmtTok(c.window)}` : null,
+    h('div', { class: 'big' }, pct !== null ? `${pct} %` : '—', ' ', h('small', {}, `${fmtTok(c.tokens)} tokens utilisés`)),
+    meter(pct, pct >= 85 ? 'bad' : pct >= 70 ? 'warn' : ''),
+    c.autoCompact ? note(`Compactage automatique vers ${fmtTok(c.autoCompact)} tokens : il reste ≈ ${fmtTok(Math.max(0, c.autoCompact - (c.tokens || 0)))}.`)
+      : c.categories ? note('Compactage automatique désactivé.') : null,
+    colored.length ? h('div', { class: 'stack', role: 'img', 'aria-label': 'Répartition du contexte' }, colored.map((x) => h('i', { style: `flex:${x.tokens} 0 0;background:${x.fill}`, title: `${CAT_FR[x.name] || x.name} : ${fmtTok(x.tokens)}` }))) : null,
+    colored.length ? h('div', { class: 'legend2' }, colored.flatMap((x) => [
+      h('span', { class: 'sw', style: `background:${x.fill}` }), h('span', {}, CAT_FR[x.name] || x.name),
+      h('span', { class: 'v' }, fmtTok(x.tokens)), h('span', { class: 'p' }, `${Math.round((100 * x.tokens) / catSum)} %`)])) : null,
+    c.categories ? note([
+      c.mcp && c.mcp.count ? `${c.mcp.count} outils MCP (${fmtTok(c.mcp.tokens)} chargés)` : null,
+      c.skills ? `${c.skills.count} skills (${fmtTok(c.skills.tokens)})` : null,
+      c.memoryFiles && c.memoryFiles.length ? `${c.memoryFiles.length} fichier${c.memoryFiles.length > 1 ? 's' : ''} de mémoire (${fmtTok(c.memoryFiles.reduce((a, f) => a + f.tokens, 0))})` : null,
+    ].filter(Boolean).join(' · ') + '. Répartition estimée, comme /context.') : null,
+    c.last ? note(`Dernière requête : ${fmtTok(c.last.cache_read_input_tokens)} lus du cache, ${fmtTok(c.last.cache_creation_input_tokens)} mis en cache, ${fmtTok(c.last.input_tokens)} neufs, ${fmtTok(c.last.output_tokens)} produits.`) : null)
+
+  // limites
+  const limits = card('⏱️ Limites d\'utilisation', null,
+    d.limits.length ? d.limits.map((l) => {
+      const [label, len] = LIMITS[l.kind] || [l.kind, 0]
+      const left = l.resetsAt ? l.resetsAt - Date.now() : null
+      const elapsed = len && left !== null ? Math.min(1, Math.max(0, 1 - left / len)) : null
+      const proj = elapsed && elapsed > 0.05 ? l.percent / elapsed : null
+      return h('div', { class: 'lim' },
+        h('div', { class: 'top' }, h('span', {}, label), h('b', { class: 'r' }, `${Math.round(l.percent)} % utilisés`)),
+        meter(l.percent, l.percent >= 90 ? 'bad' : l.percent >= 70 ? 'warn' : ''),
+        left !== null ? h('div', { class: 'sub' }, `Réinitialisation dans ${fmtDur(left)} · ${fmtDate(l.resetsAt)}`) : null,
+        h('div', { class: 'sub' },
+          elapsed !== null ? `${Math.round(elapsed * 100)} % de la fenêtre écoulée ` : '',
+          proj !== null ? (proj >= 100 ? pill('bad', `⚠ à ce rythme, limite atteinte avant la réinitialisation`) : proj >= 80 ? pill('warn', `à ce rythme : ≈ ${Math.round(proj)} % à la fin`) : pill('good', `à ce rythme : ≈ ${Math.round(proj)} % à la fin`)) : ''))
+    }) : note('Aucune limite remontée : compte API, ou pas encore de réponse de Claude dans cette session.'))
+
+  // coût de la session
+  const models = me.models || []
+  const tot = models.reduce((a, m) => ({ input: a.input + m.input, read: a.read + m.cacheRead, write: a.write + m.cacheWrite }), { input: 0, read: 0, write: 0 })
+  const hit = tot.read + tot.write + tot.input ? tot.read / (tot.read + tot.write + tot.input) : null
+  const real = isSub && planPrice && d.month && d.month.usd > 0 && me.usd ? (planPrice * me.usd) / d.month.usd : null
+  const cost = card('💵 Coût de la session', 'prix de l\'API',
+    h('div', { class: 'big' }, fmtUsd(me.usd), ' ', h('small', {}, s.turns ? `${fmtUsd(me.usd / s.turns)} par prompt` : '')),
+    note(isSub ? 'Sur abonnement, tu ne paies pas ce montant : c\'est ce que la session aurait coûté au prix de l\'API.' : 'Avec une clé API ou un fournisseur cloud, c\'est ce que tu paies.'),
+    real !== null ? kv(['Coût réel estimé', fmtUsd(real)]) : null,
+    real !== null ? note('Ta part de l\'abonnement : son prix, au prorata de ce que la session pèse dans le mois (tous projets).') : null,
+    hit !== null ? kv(['Cache', `${Math.round(hit * 100)} % de l'entrée lue depuis le cache`]) : null,
+    models.length ? h('div', { class: 'scroll', style: 'margin-top:8px' }, h('table', { class: 'dtable' },
+      h('tr', {}, ...['Modèle', 'Entrée', 'Sortie', 'Cache lu', 'Cache écrit', 'Coût'].map((t) => h('th', {}, t))),
+      ...models.sort((a, b) => b.usd - a.usd).map((m) => h('tr', {},
+        h('td', { title: m.model }, modelLabel(m.model)), h('td', {}, fmtTok(m.input)),
+        h('td', { title: m.thinking ? `dont ${fmtTok(m.thinking)} de réflexion` : '' }, fmtTok(m.output)),
+        h('td', {}, fmtTok(m.cacheRead)), h('td', {}, fmtTok(m.cacheWrite)), h('td', {}, fmtUsd(m.usd))))))
+      : note('Le détail par modèle apparaît après la première réponse de Claude.'))
+
+  // ce mois-ci, tous projets
+  const mo = d.month
+  const now = new Date()
+  const dayN = now.getDate(), daysIn = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  const priceIn = h('input', { type: 'number', min: '0', step: '1', value: planPrice || '', placeholder: 'ex. 100' })
+  priceIn.onchange = () => {
+    const v = Math.max(0, Number(priceIn.value) || 0)
+    srv.ide = { ...(srv.ide || {}), planPrice: v }
+    event({ type: 'ide.set', settings: { planPrice: v } })
+    renderDash()
+  }
+  const ratio = mo && planPrice ? mo.usd / planPrice : null
+  const month = card('🗓️ Ce mois-ci', 'tous projets',
+    h('div', { class: 'big' }, mo ? fmtUsd(mo.usd) : '—', ' ', h('small', {}, mo ? `${mo.sessions} sessions · ${mo.projects} projet${mo.projects > 1 ? 's' : ''}` : '')),
+    mo && dayN > 1 ? note(`À ce rythme : ≈ ${fmtUsd((mo.usd / dayN) * daysIn)} au prix de l'API d'ici la fin du mois.`) : null,
+    h('label', { class: 'plan' }, 'Prix de ton abonnement', priceIn, '$ / mois'),
+    ratio !== null ? note(ratio >= 1
+      ? `Au prix de l'API, ce mois vaut déjà ×${ratio.toFixed(1)} ton abonnement (${fmtUsd(mo.usd - planPrice)} de plus que son prix).`
+      : `Au prix de l'API, ce mois vaut ${Math.round(ratio * 100)} % de ton abonnement.`) : note('Indique le prix de ton abonnement pour comparer au prix de l\'API et estimer le coût réel de la session.'))
+
+  // projet
+  const days = []
+  const byDay = new Map((pr.days || []).map((x) => [x.day, x.usd]))
+  for (let i = 29; i >= 0; i--) {
+    const t = new Date(Date.now() - i * 86400e3)
+    const key = new Date(Date.UTC(t.getFullYear(), t.getMonth(), t.getDate())).toISOString().slice(0, 10)
+    days.push({ key, t, usd: byDay.get(key) || 0 })
+  }
+  const maxDay = Math.max(...days.map((x) => x.usd), 0.01)
+  const bars = h('div', { class: 'bars', role: 'img', 'aria-label': 'Coût du projet par jour, 30 derniers jours' })
+  days.forEach((x, i) => {
+    const col = h('div', {}, h('i', { style: `height:${x.usd ? Math.max(2, (100 * x.usd) / maxDay) : 0}%` }))
+    col.onmouseenter = () => {
+      bars.querySelector('.tip')?.remove()
+      bars.append(h('div', { class: 'tip', style: `left:${((i + 0.5) / days.length) * 100}%` }, `${x.t.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })} : ${fmtUsd(x.usd)}`))
+    }
+    col.onmouseleave = () => bars.querySelector('.tip')?.remove()
+    bars.append(col)
+  })
+  const priced = pr.sessions.filter((x) => x.usd)
+  const project = h('div', { class: 'dcard wide' },
+    h('h3', {}, '📁 Projet', h('span', { class: 'r', title: pr.dir || '' }, d.cwd)),
+    h('div', { class: 'big' }, fmtUsd(pr.total), ' ', h('small', {}, `au total · ${pr.count} session${pr.count > 1 ? 's' : ''}${priced.length ? ` · ${fmtUsd(pr.total / priced.length)} en moyenne` : ''}`)),
+    bars,
+    h('div', { class: 'axis' }, h('span', {}, days[0].t.toLocaleDateString([], { day: 'numeric', month: 'short' })), h('span', {}, 'max ' + fmtUsd(maxDay)), h('span', {}, 'aujourd\'hui')),
+    note('Chaque session est comptée au jour de sa dernière activité. Coûts au prix de l\'API, lus dans les fichiers de session de Claude Code.'),
+    h('div', { class: 'scroll', style: 'margin-top:8px' }, h('table', { class: 'dtable' },
+      h('tr', {}, ...['Dernière activité', 'Titre', 'Durée', 'Modèles', 'Coût'].map((t) => h('th', t === 'Titre' ? { style: 'text-align:left' } : {}, t))),
+      ...pr.sessions.map((x) => h('tr', { class: x.current ? 'me' : '' },
+        h('td', {}, fmtDate(x.last)),
+        h('td', { class: 't', title: `${x.title || ''}\n${x.id}` }, (x.current ? '▶ ' : '') + (x.title || x.id.slice(0, 8))),
+        h('td', {}, x.wallMs ? fmtDur(x.wallMs) : x.start ? fmtDur(x.last - x.start) : '—'),
+        h('td', {}, (x.models || []).filter((m) => m.usd > 0.005).map((m) => modelLabel(m.model)).join(', ') || '—'),
+        h('td', {}, x.usd === null ? '—' : fmtUsd(x.usd)))))))
+
+  body.replaceChildren(session, context, limits, cost, month, project)
 }
 
 // ---------- notification de fin ----------
@@ -2348,6 +2757,19 @@ require(['vs/editor/editor.main'], async () => {
   window.addEventListener('keydown', onShortcut, true)
   navigator.keyboard?.getLayoutMap?.().then((m) => (layoutMap = m)).catch(() => {})
   $('keysBtn').onclick = () => openKeys()
+  $('dashBtn').onclick = () => openDash()
+  $('dashClose').onclick = () => closeDash()
+  $('dashRefresh').onclick = () => { $('dashInfo').textContent = 'Actualisation…'; event({ type: 'dashboard' }) }
+  $('dash').addEventListener('mousedown', (e) => { if (e.target === $('dash')) closeDash() })
+  $('convTools').onclick = () => { P.convTools = P.convTools === false; applyConvTools(); savePrefs() }
+  $('convFollow').onclick = () => { conv.follow = !conv.follow; $('convFollow').classList.toggle('on', conv.follow); if (conv.follow) convToEnd() }
+  $('convReload').onclick = () => fetchConv(true)
+  $('convList').addEventListener('scroll', () => {
+    const l = $('convList')
+    const atEnd = l.scrollHeight - l.scrollTop - l.clientHeight < 40
+    if (atEnd !== conv.follow) { conv.follow = atEnd; $('convFollow').classList.toggle('on', atEnd) }
+  })
+  applyConvTools()
   $('keysClose').onclick = () => closeKeys()
   $('keysEdit').onclick = () => { closeKeys(); openSettings('keys') }
   $('keys').addEventListener('mousedown', (e) => { if (e.target === $('keys')) closeKeys() })
@@ -2363,6 +2785,7 @@ require(['vs/editor/editor.main'], async () => {
   const hash0 = decodeURIComponent(location.hash.slice(1))
   const first = hash0 || (srv.prefs && srv.prefs.cur) || (srv.changes.length ? srv.changes[srv.changes.length - 1].path : null)
   if (first) await openFile(first)
+  if (srv.prefs && srv.prefs.onConv) openConv()
   started = true
   connect()
 })

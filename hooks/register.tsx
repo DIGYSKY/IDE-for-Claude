@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Annotation, Change, HistFile, Idea, Mode, OpenFile, PlanItem, Project, Queued, ReviewItem, SavedCommand, Status, Turn } from '../types'
+import { conversation, dashboard } from './insights'
 import { cutToks, langOf, start, tokenize } from './syntax'
 import type { Kind, Tok } from './syntax'
 
@@ -669,6 +670,8 @@ type IdeSettings = {
   statusline: string
   /** `claude` : la statusLine configurée dans Claude Code (son script) ; `template` : le modèle ci-dessus */
   statuslineSource: 'claude' | 'template'
+  /** prix de l'abonnement Claude, en $ par mois (0 : non renseigné), pour comparer au prix API */
+  planPrice: number
 }
 const IDE_DEFAULTS: IdeSettings = {
   autoOpenPane: true,
@@ -677,6 +680,7 @@ const IDE_DEFAULTS: IdeSettings = {
   historyDays: 30,
   statusline: '{model} · contexte {context} · {cost} · {branch}',
   statuslineSource: 'claude',
+  planPrice: 0,
 }
 async function ideSettings($: $): Promise<IdeSettings> {
   const s = (await $.store.get('ide').catch(() => undefined)) as Partial<IdeSettings> | undefined
@@ -809,6 +813,15 @@ function modelName(id: string | undefined) {
 /** L'effort de la dernière requête du fil principal : celui qu'affiche la barre d'état de Claude Code. */
 let lastEffort: string | undefined
 
+/** l'effort du dernier tour, sinon celui demandé par l'environnement ou les réglages */
+async function currentEffort($: $): Promise<string | undefined> {
+  return (
+    lastEffort ||
+    (await $.env.get('CLAUDE_EFFORT').catch(() => undefined)) ||
+    ((await $.settings.read({ key: 'effortLevel' }).catch(() => undefined)) as string | undefined)
+  )
+}
+
 async function claudeStatusLine($: $, cwd: string, model: string | undefined, usage: Awaited<ReturnType<$['session']['usage']>> | null) {
   const conf = (await $.settings.read({ key: 'statusLine' }).catch(() => undefined)) as { type?: string; command?: string } | undefined
   if (!conf || conf.type !== 'command' || !conf.command) return null
@@ -818,10 +831,7 @@ async function claudeStatusLine($: $, cwd: string, model: string | undefined, us
     const at = r?.resetsAt ? Math.floor(Date.parse(r.resetsAt) / 1000) : NaN
     return r ? { used_percentage: r.percentUsed, ...(Number.isFinite(at) ? { resets_at: at } : {}) } : undefined
   }
-  const effort =
-    lastEffort ||
-    (await $.env.get('CLAUDE_EFFORT').catch(() => undefined)) ||
-    ((await $.settings.read({ key: 'effortLevel' }).catch(() => undefined)) as string | undefined)
+  const effort = await currentEffort($)
   const input = {
     hook_event_name: 'Status',
     session_id: await $.session.id().catch(() => ''),
@@ -1102,6 +1112,7 @@ type WebEvent = {
   key?: string
   value?: unknown
   scope?: string
+  from?: number
 }
 
 async function onWebEvent($: $, ev: WebEvent) {
@@ -1212,6 +1223,20 @@ async function onWebEvent($: $, ev: WebEvent) {
       if (!item) break
       await update($, queueAtom, q => q.filter(x => x.id !== ev.id))
       await submitPrompt($, item.text)
+      break
+    }
+    // --- conversation et tableau de bord : la page les demande quand elle les affiche ---
+    case 'conversation':
+      await notify($, { type: 'conversation', ...(await conversation($, typeof ev.from === 'number' ? ev.from : 0)) })
+      break
+    case 'dashboard': {
+      const ide = await ideSettings($)
+      const data = await dashboard($, {
+        effort: await currentEffort($),
+        planPrice: ide.planPrice || undefined,
+        changedFiles: new Set((await read($, historyAtom)).flatMap(t => t.files.map(f => f.path))).size,
+      })
+      await notify($, { type: 'dashboard', data })
       break
     }
     case 'busy.reset':
@@ -1662,6 +1687,7 @@ export const register: Register = on => {
       return await next(e)
     } finally {
       void notify($, { type: 'activity', label: null })
+      void notify($, { type: 'convChanged' })
       void refreshStatus($)
     }
   })
@@ -1672,6 +1698,13 @@ export const register: Register = on => {
     return yield* next(e)
   })
 
+  // le prompt de la personne entre dans la conversation
+  on('turn.start', async ($, e, next) => {
+    const r = await next(e)
+    if (e.agentId === undefined && (await read($, webAtom))) void notify($, { type: 'convChanged' })
+    return r
+  })
+
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
     if (e.agentId === undefined) {
@@ -1679,6 +1712,7 @@ export const register: Register = on => {
       await persist($)
       if (await read($, webAtom)) {
         void notify($, { type: 'done' })
+        void notify($, { type: 'convChanged' })
         void refreshStatus($, true)
       }
       // pas d'attente ici : le prompt suivant ne part qu'une fois ce tour fini

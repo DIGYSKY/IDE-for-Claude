@@ -68,6 +68,23 @@ On peut passer de l'une à l'autre : la touche `w` du panneau ouvre la page web 
 
 Le contexte joint (emplacements des fichiers, idées, revue) apparaît sous le prompt, dans le terminal aussi : Claude Code ne permet pas à une mod de le joindre à part pour un prompt qu'elle envoie.
 
+### 💬 La conversation
+
+Le premier onglet de l'éditeur, fixe (il ne se ferme pas et reste à gauche même quand les onglets défilent), affiche la conversation avec Claude Code : tes prompts, ses réponses en markdown (code coloré, chemins `fichier:ligne` cliquables) et ses appels d'outils, dépliables pour voir leur résultat. 🔧 Outils les masque, ⇩ Suivre garde la fin à l'écran. Elle se met à jour pendant que Claude travaille ; un ● sur l'onglet signale du nouveau quand tu es sur un fichier. L'éditeur de prompt reste en bas, toujours disponible.
+
+### 📊 Claude Status
+
+Le bouton en haut ouvre un tableau de bord de la session et de Claude, actualisé toutes les 15 s :
+
+- **Session** : modèle, effort, durée, nombre de prompts, fichiers modifiés, lignes ajoutées et retirées, temps de réponse de l'API et des outils, version de Claude Code
+- **Contexte** : remplissage, tokens restants avant le compactage automatique, répartition comme `/context` (prompt système, outils, MCP, mémoire, skills, messages), cache de la dernière requête
+- **Limites** : fenêtres de 5 heures et de 7 jours, réinitialisation, et le rythme : à quel pourcentage tu finiras la fenêtre si tu continues ainsi
+- **Coût de la session** au prix de l'API, par prompt et par modèle (entrée, sortie, cache), part de l'entrée servie par le cache
+- **Ce mois-ci**, tous projets : le total au prix de l'API et sa projection. Indique le prix de ton abonnement pour voir ce qu'il vaut au prix de l'API et le **coût réel estimé** de la session (sa part de l'abonnement)
+- **Projet** : le coût total de toutes ses sessions, par jour sur 30 jours, et la liste des sessions (titre, durée, modèles, coût)
+
+Les coûts des sessions passées viennent des fichiers de session de Claude Code (`~/.claude/projects/`), lus seulement à l'ouverture du tableau.
+
 ### Les outils de Claude
 
 La mod donne à Claude des outils à lui :
@@ -123,6 +140,8 @@ Ci-dessous, `Mod` est `Cmd` sur macOS et `Ctrl` ailleurs. Les raccourcis à lett
 | `Ctrl+G` | Aller à la ligne |
 | `Mod+B` | Masquer ou afficher la barre latérale |
 | `Alt+1` à `Alt+7` · macOS `⌃1` à `⌃7` | Fichiers, recherche, historique, revue, idées, annotations, commandes |
+| `Alt+0` · macOS `⌃0` | 💬 Conversation, et retour au fichier |
+| `Alt+9` · macOS `⌃9` | 📊 Claude Status |
 
 | Prompt et commandes | |
 |---|---|
@@ -223,6 +242,7 @@ claude plugin test .
 .claude-plugin/marketplace.json  marketplace « digysky » pour l'installation
 hooks/register.tsx           la mod : panneau, suivi des modifs, historique, review
 hooks/syntax.ts              coloration syntaxique du panneau terminal
+hooks/insights.ts            conversation et tableau de bord Claude Status
 server/server.mjs            serveur local du mode navigateur (sans dépendance)
 server/index.html            page web (Monaco)
 types/index.d.ts             types de l'état de la mod
