@@ -465,6 +465,7 @@
         <div id="convBar"><b>💬 Conversation</b><span id="convCount" class="hint"></span><span class="spacer"></span>
           <button id="convArtsBtn" title="Les artefacts publiés pendant la session" hidden></button>
           <span class="seg" title="Taille du texte de la conversation"><button id="convSmaller" aria-label="Texte plus petit">A−</button><button id="convSize" title="Taille par défaut"></button><button id="convBigger" aria-label="Texte plus grand">A+</button></span>
+          <button id="convAsk" class="toggle" role="switch"></button>
           <button id="convTools" title="Afficher les appels d'outils de Claude">🔧 Outils</button>
           <button id="convFollow" class="on" title="Suivre la fin de la conversation">⇩ Suivre</button>
           <button id="convReload" title="Recharger toute la conversation">↻</button></div>
@@ -2054,7 +2055,7 @@ function renderSettings() {
     const putP = (k, v) => { P[k] = v; savePrefs() }
     body.append(h('h3', {}, 'Claude et la revue'),
       setRow('Ouvrir le panneau du terminal tout seul', 'À la première modif de Claude, quand la page web n\'est pas ouverte', control('bool', ide.autoOpenPane, (v) => put('autoOpenPane', v))),
-      setRow('Questions de Claude dans la page', 'Quand la page est ouverte, ses QCM s\'affichent au-dessus du prompt et tu y réponds ici (sinon, dans le terminal)', control('bool', ide.askInPage !== false, (v) => put('askInPage', v))),
+      setRow('Questions de Claude dans la page', 'Quand la page est ouverte, ses QCM s\'affichent au-dessus du prompt et tu y réponds ici (sinon, dans le terminal)', control('bool', ide.askInPage !== false, (v) => { put('askInPage', v); applyAskInPage() })),
       setRow('Taille du texte de la conversation', 'En pixels (14 par défaut). Aussi avec A− / A+ dans la conversation', control('number', convFont(), (v) => { put('convFont', Math.max(10, Math.min(40, Number(v) || 14))); applyConvFont() })),
       setRow('Validation automatique', 'Dès qu\'un prompt part, tous les fichiers encore en revue sont validés d\'office', control('bool', !!ide.autoAccept, (v) => put('autoAccept', v))),
       setRow('Joindre la revue au prochain prompt', 'Commentaires, rejets, idées et extraits partent avec ton prochain prompt', control('bool', ide.attachReview, (v) => put('attachReview', v))),
@@ -2187,6 +2188,7 @@ async function refreshState() {
   renderStatus()
   applyEditorSettings()
   applyConvFont()
+  applyAskInPage()
   $('allOk').hidden = !srv.changes.length
   $('allOk').textContent = `✅ Tout valider (${srv.changes.length})`
   const f = cur && files.get(cur)
@@ -2415,6 +2417,24 @@ function stepConvFont(dir) {
   event({ type: 'ide.set', settings: { convFont: next } })
   applyConvFont()
   if (conv.follow) convToEnd()
+}
+// ❓ questions de Claude : dans la page, ou d'office dans le terminal
+function applyAskInPage() {
+  const on = (srv.ide || {}).askInPage !== false
+  const b = $('convAsk')
+  b.classList.toggle('on', on)
+  b.setAttribute('aria-checked', String(on))
+  b.textContent = on ? '❓ Questions : page' : '❓ Questions : terminal'
+  b.title = on ? 'Les questions de Claude s\'affichent ici. Clic : les poser d\'office dans le terminal' : 'Les questions de Claude se posent dans le terminal. Clic : les afficher dans la page'
+}
+function toggleAskInPage() {
+  const on = (srv.ide || {}).askInPage === false
+  srv.ide = { ...(srv.ide || {}), askInPage: on }
+  event({ type: 'ide.set', settings: { askInPage: on } })
+  applyAskInPage()
+  // une question déjà affichée part dans le terminal
+  if (!on && question) { event({ type: 'question.terminal', id: question.id }); question = null; renderQuestion() }
+  toast(on ? '❓ Les questions de Claude s\'afficheront dans la page' : '❓ Les questions de Claude se poseront dans le terminal')
 }
 function applyConvTools() {
   $('convView').classList.toggle('notools', P.convTools === false)
@@ -2971,6 +2991,7 @@ require(['vs/editor/editor.main'], async () => {
   $('convTools').onclick = () => { P.convTools = P.convTools === false; applyConvTools(); savePrefs() }
   $('convFollow').onclick = () => { conv.follow = !conv.follow; $('convFollow').classList.toggle('on', conv.follow); if (conv.follow) convToEnd() }
   $('convReload').onclick = () => fetchConv(true)
+  $('convAsk').onclick = () => toggleAskInPage()
   $('convList').addEventListener('scroll', () => {
     const l = $('convList')
     const atEnd = l.scrollHeight - l.scrollTop - l.clientHeight < 40
