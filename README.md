@@ -87,7 +87,8 @@ La mod donne à Claude des outils à lui :
 ### ⚙️ Paramètres
 
 - **Éditeur** : police, taille, tabulations, retour à la ligne, minimap, thème… et un `settings.json` façon VS Code (toutes les options `editor.*` de Monaco). « Importer mon settings.json de VS Code » reprend tes réglages `editor.*` de VS Code (ou Cursor)
-- **IDE for Claude** : ouverture automatique du panneau, revue jointe au prompt, durée de conservation de l'historique, ouverture des fichiers modifiés, son de fin, modèle de la barre d'état
+- **⌨️ Raccourcis** : changer les touches de chaque action
+- **IDE for Claude** : ouverture automatique du panneau, validation automatique (dès qu'un prompt part, tout ce qui est en revue est validé), revue jointe au prompt, durée de conservation de l'historique, ouverture des fichiers modifiés, son de fin, modèle de la barre d'état
 - **Claude Code** : les réglages de `/config`, appliqués tout de suite, et les fichiers `settings.json` (utilisateur, projet, local) à modifier directement. Le JSON est vérifié avant d'être écrit, et l'ancienne version est gardée en `.bak`
 
 ### Barre d'état
@@ -98,17 +99,41 @@ Sinon, ou si tu choisis « template » dans ⚙️, un modèle maison : variable
 
 ### Raccourcis
 
-| Raccourci | Action |
+`?` (hors d'un champ de texte) ou ⌨️ dans l'en-tête affiche la liste. Tous se changent dans ⚙️ → ⌨️ Raccourcis : « + » puis la combinaison, ✕ pour en retirer une, ↺ pour revenir à celle par défaut.
+
+Ci-dessous, `Mod` est `Cmd` sur macOS et `Ctrl` ailleurs. Les raccourcis à lettre utilisent `Alt` sur Windows et Linux, et la vraie touche `Ctrl` sur macOS : là, `⌥` + lettre tape un caractère (`{`, `[`, `|`…).
+
+| Revue | |
 |---|---|
-| `Ctrl+P` | Ouvrir un fichier |
-| `Ctrl+Shift+F` | Chercher dans le projet |
-| `Ctrl+S` | Sauver |
-| `Ctrl+L` | Mentionner la sélection (fichier et lignes) dans le prompt |
-| `Ctrl+Alt+I` | Nouvelle idée depuis la sélection |
-| `Ctrl+Entrée` | Envoyer le prompt, valider un commentaire |
+| `F7` / `Maj+F7` (ou `Ctrl+Alt+↓` / `Ctrl+Alt+↑`) | Modif suivante / précédente, puis le fichier en revue suivant |
+| `Alt+A` · macOS `⌃A` | Accepter le bloc sous le curseur, puis aller au suivant |
+| `Alt+R` · macOS `⌃R` | Rejeter le bloc |
+| `Alt+Maj+A` · macOS `⌃⇧A` | Valider tout le fichier |
+| `Alt+C` · macOS `⌃C` | Commenter la ligne ou la sélection |
+| `Mod+Maj+Entrée` | Soumettre la revue |
+
+| Navigation | |
+|---|---|
+| `Ctrl+Alt+←` / `Ctrl+Alt+→` | Onglet précédent / suivant |
+| `Alt+W` · macOS `⌃W` | Fermer l'onglet |
+| `Mod+P` | Ouvrir un fichier |
+| `Mod+S` | Enregistrer |
+| `Mod+Maj+F` | Chercher dans le projet |
+| `Ctrl+G` | Aller à la ligne |
+| `Mod+B` | Masquer ou afficher la barre latérale |
+| `Alt+1` à `Alt+7` · macOS `⌃1` à `⌃7` | Fichiers, recherche, historique, revue, idées, annotations, commandes |
+
+| Prompt et commandes | |
+|---|---|
+| `Mod+K` | Aller dans l'éditeur de prompt, et en revenir |
+| `Mod+L` (ou la vraie touche `Ctrl+L`) | Mentionner la sélection (fichier et lignes) dans le prompt |
+| `Alt+I` · macOS `⌃I` | Nouvelle idée depuis la sélection |
+| `Alt+E` · macOS `⌃E` | Relancer la dernière commande |
+| `Alt+X` · macOS `⌃X` | Arrêter la commande |
+| `Mod+Entrée` | Envoyer le prompt, valider un commentaire |
 | `↑` / `↓` dans le prompt | Prompts précédents |
 
-Sur macOS, `Cmd` marche à la place de `Ctrl`. Chrome peut garder `Cmd+L` pour sa barre d'adresse : la vraie touche `Ctrl+L` marche aussi.
+Un raccourci qui n'a rien à faire là où tu es garde l'effet habituel de la touche : par exemple, `⌃A` hors d'un bloc modifié par Claude ramène en début de ligne. Les raccourcis de revue ne s'appliquent pas pendant que tu écris dans le prompt.
 
 ## Ce qui est enregistré
 

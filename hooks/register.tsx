@@ -661,6 +661,8 @@ type IdeSettings = {
   autoOpenPane: boolean
   /** la revue en attente part avec le prochain prompt */
   attachReview: boolean
+  /** validation automatique : à l'envoi d'un prompt, tous les fichiers encore en revue sont validés */
+  autoAccept: boolean
   /** jours de conservation de l'historique des sessions */
   historyDays: number
   /** modèle de la barre d'état de la page */
@@ -671,6 +673,7 @@ type IdeSettings = {
 const IDE_DEFAULTS: IdeSettings = {
   autoOpenPane: true,
   attachReview: true,
+  autoAccept: false,
   historyDays: 30,
   statusline: '{model} · contexte {context} · {cost} · {branch}',
   statuslineSource: 'claude',
@@ -803,14 +806,22 @@ function modelName(id: string | undefined) {
  * on lance la même commande avec le JSON que Claude Code lui donne, et on garde sa sortie,
  * couleurs du terminal comprises (la page les convertit).
  */
+/** L'effort de la dernière requête du fil principal : celui qu'affiche la barre d'état de Claude Code. */
+let lastEffort: string | undefined
+
 async function claudeStatusLine($: $, cwd: string, model: string | undefined, usage: Awaited<ReturnType<$['session']['usage']>> | null) {
   const conf = (await $.settings.read({ key: 'statusLine' }).catch(() => undefined)) as { type?: string; command?: string } | undefined
   if (!conf || conf.type !== 'command' || !conf.command) return null
   const limit = (kind: string) => {
     const r = usage?.rateLimits.find(x => x.kind === kind)
-    return r ? { used_percentage: r.percentUsed, ...(r.resetsAt ? { resets_at: r.resetsAt } : {}) } : undefined
+    // Claude Code donne resets_at en secondes Unix aux scripts de barre d'état ; la mod le reçoit en ISO
+    const at = r?.resetsAt ? Math.floor(Date.parse(r.resetsAt) / 1000) : NaN
+    return r ? { used_percentage: r.percentUsed, ...(Number.isFinite(at) ? { resets_at: at } : {}) } : undefined
   }
-  const effort = (await $.env.get('CLAUDE_EFFORT').catch(() => undefined)) || ((await $.settings.read({ key: 'effortLevel' }).catch(() => undefined)) as string | undefined)
+  const effort =
+    lastEffort ||
+    (await $.env.get('CLAUDE_EFFORT').catch(() => undefined)) ||
+    ((await $.settings.read({ key: 'effortLevel' }).catch(() => undefined)) as string | undefined)
   const input = {
     hook_event_name: 'Status',
     session_id: await $.session.id().catch(() => ''),
@@ -890,6 +901,7 @@ async function submitPrompt($: $, raw: string) {
   // Claude Code ne passe pas un prompt envoyé par la mod dans ses propres hooks prompt.submit :
   // on fait ici ce que ce hook fait pour un prompt tapé (nouveau tour, revue jointe)...
   await ensureRestored($).catch(() => null)
+  await autoAcceptAll($)
   await update($, changesAtom, list => list.map(c => ({ ...c, stale: true })))
   await newTurn($, text)
   await update($, busyAtom, () => true)
@@ -1373,6 +1385,15 @@ async function closeReview($: $, path: string) {
   await update($, acceptedAtom, list => list.filter(k => !k.startsWith(path + '|')))
 }
 
+/** Validation automatique (réglage) : un prompt qui part valide d'office tout ce qui est encore en revue. */
+async function autoAcceptAll($: $) {
+  if (!(await ideSettings($)).autoAccept) return
+  const paths = (await read($, changesAtom)).map(c => c.path)
+  for (const path of paths) await closeReview($, path)
+  if (paths.length)
+    void notify($, { type: 'toast', text: `✅ Validation automatique : ${paths.length} fichier${paths.length > 1 ? 's' : ''} sorti${paths.length > 1 ? 's' : ''} de la revue` })
+}
+
 /** Les fichiers de la revue qui n'existent plus (supprimés hors de la page) en sortent. */
 async function pruneGone($: $) {
   const list = await read($, changesAtom)
@@ -1481,6 +1502,7 @@ export const register: Register = on => {
   on('prompt.submit', async ($, e, next) => {
     if (e.command) return next(e)
     await ensureRestored($).catch(() => null)
+    await autoAcceptAll($)
     await update($, changesAtom, list => list.map(c => ({ ...c, stale: true })))
     await newTurn($, e.text)
     await update($, busyAtom, () => true)
@@ -1607,6 +1629,12 @@ export const register: Register = on => {
       void notify($, { type: 'activity', label: null })
       void refreshStatus($)
     }
+  })
+
+  // l'effort réellement envoyé (après un /effort ou un ajustement au modèle), pour la barre d'état
+  on('turn.step', async function* ($, e, next) {
+    if (e.agentId === undefined && e.effort !== undefined) lastEffort = String(e.effort)
+    return yield* next(e)
   })
 
   on('turn.complete', async ($, e, next) => {

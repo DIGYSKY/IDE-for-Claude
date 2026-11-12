@@ -241,6 +241,20 @@
   /* fenêtres */
   .modal { position: fixed; inset: 0; background: rgba(0,0,0,.25); display: none; align-items: flex-start; justify-content: center; padding-top: 12vh; z-index: 50; }
   .modal.show { display: flex; }
+  #app.noside { grid-template-columns: 0 0 1fr; }
+  #app.noside aside, #app.noside #split { display: none; }
+  #keys .card { width: min(720px, 95vw); }
+  #keysBody { max-height: 70vh; overflow: auto; columns: 2 300px; column-gap: 24px; }
+  #keysBody section { break-inside: avoid; margin-bottom: 12px; }
+  #keysBody h3 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .krow { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; font-size: 12.5px; }
+  .krow .k { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+  .kedit { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; justify-content: flex-end; }
+  .kedit kbd { display: inline-flex; gap: 4px; align-items: center; }
+  .kedit kbd .x { cursor: pointer; color: var(--muted); }
+  .kedit kbd .x:hover { color: var(--text); }
+  .kedit button { padding: 1px 8px; font-size: 11px; }
+  .kedit .rec { color: var(--accent); font-size: 11px; }
   .card { width: min(620px, 92vw); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; }
   .card .body { padding: 14px; }
   .card .acts { display: flex; gap: 8px; justify-content: flex-end; padding: 10px 14px; border-top: 1px solid var(--border); background: var(--panel); }
@@ -261,8 +275,9 @@
     <span class="name" id="name">IDE for Claude</span>
     <span class="spacer"></span>
     <button class="ghost okb" id="allOk" title="Valider tous les fichiers encore en revue, tous prompts confondus" hidden></button>
-    <button class="ghost" id="qoBtn" title="Ouvrir un fichier">🔎 Ouvrir <kbd>Ctrl+P</kbd></button>
+    <button class="ghost" id="qoBtn" title="Ouvrir un fichier">🔎 Ouvrir <kbd id="qoKey">Ctrl+P</kbd></button>
     <button class="ghost" id="notifBtn" title="Notification quand Claude a fini">🔕</button>
+    <button class="ghost" id="keysBtn" title="Raccourcis clavier">⌨️</button>
     <button class="ghost" id="setBtn" title="Paramètres">⚙️</button>
   </header>
   <aside>
@@ -320,9 +335,9 @@
     <div id="banner"><span id="bannerText"></span><span class="spacer"></span>
       <button id="bannerReload">Recharger</button><button id="bannerForce">Écraser</button></div>
     <div id="editors">
-      <div id="empty"><div>Choisis un fichier à gauche ou avec <kbd>Ctrl+P</kbd>.<br>
+      <div id="empty"><div>Choisis un fichier à gauche ou avec <kbd class="qoKey2">Ctrl+P</kbd>.<br>
         Les fichiers modifiés par Claude s'ouvrent ici avec leur diff.<br>
-        <kbd>Ctrl+L</kbd> mentionne la sélection dans le prompt, le <b>+</b> d'une ligne la commente.</div></div>
+        <kbd class="lKey">Ctrl+L</kbd> mentionne la sélection dans le prompt, le <b>+</b> d'une ligne la commente.</div></div>
       <div id="ed" hidden></div>
       <div id="diff" hidden></div>
       <div id="runView" hidden>
@@ -357,6 +372,8 @@
   <div class="acts"><button id="cfNo">Annuler</button><button id="cfYes" class="primary">Confirmer</button></div></div></div>
 <div class="modal" id="settings"><div class="card"><div class="body"><div id="setNav"></div><div id="setBody"></div></div>
   <div class="acts"><span class="hint" id="setInfo" style="margin-right:auto"></span><button id="setClose" class="primary">Fermer</button></div></div></div>
+<div class="modal" id="keys"><div class="card"><div class="body" id="keysBody"></div>
+  <div class="acts"><button id="keysEdit">⚙️ Personnaliser</button><button id="keysClose" class="primary">Fermer</button></div></div></div>
 <div id="toasts"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
@@ -464,6 +481,7 @@ function rememberView() {
 }
 function applyLayoutPrefs() {
   document.getElementById('app').style.setProperty('--side', P.side + 'px')
+  document.getElementById('app').classList.toggle('noside', !!P.sideHidden)
   if (P.dock) document.getElementById('app').style.setProperty('--dock', P.dock + 'px')
   if (promptEd && P.draft && !promptEd.getValue()) promptEd.setValue(P.draft)
   showPanel(P.panel, false)
@@ -536,8 +554,9 @@ function acceptHunks(p, keys) {
   savePrefs()
   event({ type: 'acceptFile', path: p })
 }
+const tabList = () => [...new Set([...srv.changes.map((c) => c.path), ...tabs])]
 function renderTabs() {
-  const list = [...new Set([...srv.changes.map((c) => c.path), ...tabs])]
+  const list = tabList()
   const box = $('tabs')
   box.replaceChildren()
   for (const p of list) {
@@ -774,6 +793,7 @@ function renderZones() {
   const ed = isDiff ? diff.getModifiedEditor() : editor
   const bucket = isDiff ? 'diff' : 'ed'
   f.hunks = []
+  f.hunkInfo = []
   const max = f.model.getLineCount()
   // barres « bloc modifié par Claude »
   if (isDiff && P.compare === 'claude' && isChanged(cur) && f.original) {
@@ -785,6 +805,7 @@ function renderZones() {
       const ok = srv.accepted.includes(key)
       const start = Math.max(1, c.modifiedStartLineNumber)
       const end = c.modifiedEndLineNumber === 0 ? start : c.modifiedEndLineNumber
+      f.hunkInfo.push({ key, start: Math.min(start, max), end: Math.min(end, max), c, orig, mod })
       const node = stop(h('div', { class: 'zone hunk' + (ok ? ' ok' : '') },
         h('span', {}, ok ? '✅ Validé' : '✏️ Bloc modifié par Claude'),
         h('button', { class: 'okb', onclick: () => (ok ? event({ type: 'accept', keys: [key], on: false }) : acceptHunks(cur, [key])) }, ok ? 'Annuler la validation' : '✅ Accepter'),
@@ -809,6 +830,12 @@ function renderZones() {
   for (const d of drafts.filter((x) => x.path === cur)) draftWidget(ed, bucket, d, max)
   updateFileButtons()
   renderTabs()
+  // une navigation au clavier attendait les blocs de ce fichier
+  if (pendingHunk && f.hunkInfo.length) {
+    const h = pendingHunk === 'first' ? f.hunkInfo[0] : f.hunkInfo[f.hunkInfo.length - 1]
+    pendingHunk = null
+    setTimeout(() => gotoHunk(h), 0)
+  }
 }
 
 function startComment(line, endLine) {
@@ -842,7 +869,7 @@ function draftWidget(ed, bucket, d, max) {
   const node = stop(h('div', { class: 'cbox draft' },
     h('div', { class: 'who' }, `💬 Ligne${endLine > line ? `s ${line}-${endLine}` : ` ${line}`} · joint à ton prochain prompt`),
     ta,
-    h('div', { class: 'acts' }, h('button', { onclick: close }, 'Annuler'), h('button', { class: 'primary', onclick: submit }, 'Commenter (Ctrl+Entrée)')),
+    h('div', { class: 'acts' }, h('button', { onclick: close }, 'Annuler'), h('button', { class: 'primary', onclick: submit }, `Commenter (${fmtCombo('Mod+Enter')})`)),
   ))
   addWidget(ed, bucket, endLine, 132, node)
   if (d.focus) {
@@ -978,7 +1005,7 @@ function renderReview() {
   const box = $('review')
   box.replaceChildren()
   if (!items.length) {
-    box.append(h('div', { class: 'hint' }, 'Rien en attente. Clique sur le + d\'une ligne pour commenter, Ctrl+L pour joindre du code, ou ❌ Rejeter sur un bloc. Tout part avec ton prochain prompt.'))
+    box.append(h('div', { class: 'hint' }, `Rien en attente. Clique sur le + d'une ligne pour commenter (${firstKey('review.comment') || 'clic droit'}), ou ❌ Rejeter sur un bloc. Tout part avec ton prochain prompt, ou avec « Soumettre la revue ».`))
   } else {
     box.append(h('div', { class: 'pad' }, h('button', { class: 'primary', style: 'width:100%', title: 'Envoie ces éléments à Claude tout de suite, sans écrire de prompt', onclick: submitReview }, `📨 Soumettre la revue (${items.length})`)))
     box.append(h('div', { class: 'hint' }, srv.busy ? 'Claude travaille : la revue partira dès qu\'il aura fini. Sinon, elle part avec ton prochain prompt.' : 'Sinon, elle part avec ton prochain prompt.'))
@@ -1459,6 +1486,336 @@ function applyTheme() {
   monaco.editor.setTheme(forced || (matchMedia('(prefers-color-scheme: dark)').matches ? 'vs-dark' : 'vs'))
 }
 
+// ---------- raccourcis clavier ----------
+// Une liste d'actions, chacune avec ses touches par défaut ; la personne peut les changer dans ⚙️ (réglage « keybindings »).
+// « Mod » est Cmd sur Mac et Ctrl ailleurs ; « Ctrl » est la vraie touche Ctrl.
+// Sur Mac, ⌥ + lettre tape un caractère ({, [, |, ~…) : les raccourcis à lettre y passent par Ctrl, ailleurs par Alt.
+const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+const LK = MAC ? 'Ctrl' : 'Alt'
+const PANELS = [['files', 'Fichiers'], ['search', 'Recherche'], ['history', 'Historique'], ['review', 'Revue'], ['ideas', 'Idées'], ['ann', 'Annotations'], ['runs', 'Commandes']]
+const KEYMAP = [
+  ['review.next', 'Revue', 'Modif suivante (puis fichier suivant)', ['F7', 'Ctrl+Alt+ArrowDown']],
+  ['review.prev', 'Revue', 'Modif précédente', ['Shift+F7', 'Ctrl+Alt+ArrowUp']],
+  ['review.accept', 'Revue', 'Accepter le bloc', [`${LK}+A`]],
+  ['review.reject', 'Revue', 'Rejeter le bloc', [`${LK}+R`]],
+  ['review.acceptFile', 'Revue', 'Valider tout le fichier', [`${LK}+Shift+A`]],
+  ['review.comment', 'Revue', 'Commenter la ligne ou la sélection', [`${LK}+C`]],
+  ['review.submit', 'Revue', 'Soumettre la revue', ['Mod+Shift+Enter']],
+  ['tab.next', 'Navigation', 'Onglet suivant', ['Ctrl+Alt+ArrowRight']],
+  ['tab.prev', 'Navigation', 'Onglet précédent', ['Ctrl+Alt+ArrowLeft']],
+  ['tab.close', 'Navigation', 'Fermer l\'onglet', [`${LK}+W`]],
+  ['file.open', 'Navigation', 'Ouvrir un fichier', ['Mod+P']],
+  ['file.save', 'Navigation', 'Enregistrer', ['Mod+S']],
+  ['search', 'Navigation', 'Rechercher dans le projet', ['Mod+Shift+F']],
+  ['goto.line', 'Navigation', 'Aller à la ligne', ['Ctrl+G']],
+  ['side.toggle', 'Navigation', 'Masquer ou afficher la barre latérale', ['Mod+B']],
+  ...PANELS.map(([p, label], i) => [`panel.${p}`, 'Navigation', `Panneau ${label}`, [`${LK}+${i + 1}`]]),
+  ['prompt.focus', 'Prompt et commandes', 'Aller dans l\'éditeur de prompt, et en revenir', ['Mod+K']],
+  // sur Mac, Chrome garde souvent ⌘L pour sa barre d'adresse : ⌃L d'abord
+  ['code.prompt', 'Prompt et commandes', 'Mentionner la sélection dans le prompt', MAC ? ['Ctrl+L', 'Mod+L'] : ['Mod+L']],
+  ['code.idea', 'Prompt et commandes', 'Nouvelle idée depuis la sélection', [`${LK}+I`]],
+  ['run.again', 'Prompt et commandes', 'Relancer la dernière commande', [`${LK}+E`]],
+  ['run.stop', 'Prompt et commandes', 'Arrêter la commande', [`${LK}+X`]],
+  ['help', 'Aide', 'Liste des raccourcis', ['?', `${LK}+H`]],
+]
+/** touches fixes, rappelées dans l'aide */
+const FIXED_KEYS = [
+  ['Prompt', 'Envoyer le prompt', ['Mod+Enter']],
+  ['Prompt', 'Prompts précédents', ['ArrowUp', 'ArrowDown']],
+  ['Prompt', 'Commenter (dans un commentaire)', ['Mod+Enter']],
+  ['Aide', 'Fermer une fenêtre', ['Escape']],
+]
+let layoutMap = null     // la disposition du clavier (AZERTY…), pour nommer les lettres comme elles sont gravées
+let recordingKey = null  // l'action dont on enregistre une nouvelle touche dans ⚙️
+let pendingHunk = null   // 'first' | 'last' : bloc où aller quand le fichier suivant sera affiché
+
+const MOD_ORDER = ['Mod', 'Ctrl', 'Alt', 'Shift']
+/** « Ctrl+Shift+a » → forme canonique ; hors Mac, Ctrl et Mod sont la même touche */
+function normCombo(s) {
+  const parts = String(s).split('+').filter(Boolean)
+  let key = parts.pop() || ''
+  if (key.length === 1) key = key.toUpperCase()
+  const mods = new Set(parts.map((m) => ({ cmd: 'Mod', meta: 'Mod', mod: 'Mod', ctrl: MAC ? 'Ctrl' : 'Mod', control: MAC ? 'Ctrl' : 'Mod', alt: 'Alt', option: 'Alt', shift: 'Shift' })[m.toLowerCase()] || m))
+  return [...MOD_ORDER.filter((m) => mods.has(m)), key].join('+')
+}
+/** la touche pressée, sous la même forme */
+function comboOf(e) {
+  if (['Control', 'Shift', 'Alt', 'Meta', 'AltGraph', 'CapsLock'].includes(e.key)) return null
+  let k
+  if (/^Digit\d$/.test(e.code)) k = e.code.slice(5)
+  else if (/^Key[A-Z]$/.test(e.code)) k = ((layoutMap && layoutMap.get(e.code)) || (/^[a-z]$/i.test(e.key) ? e.key : e.code.slice(3))).toUpperCase()
+  else if (e.key === ' ') k = 'Space'
+  else k = e.key.length === 1 ? e.key.toUpperCase() : e.key
+  // la ponctuation se nomme comme elle sort : la majuscule qu'il faut pour la taper n'y compte pas
+  const punct = k.length === 1 && !/[A-Z0-9]/.test(k)
+  const mods = []
+  if (MAC ? e.metaKey : e.ctrlKey) mods.push('Mod')
+  if (MAC && e.ctrlKey) mods.push('Ctrl')
+  if (e.altKey) mods.push('Alt')
+  if (e.shiftKey && !punct) mods.push('Shift')
+  return [...mods, k].join('+')
+}
+const KEY_NAMES = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Enter: MAC ? '↩' : 'Entrée', Escape: 'Échap', Space: 'Espace', Backspace: '⌫', Delete: 'Suppr', Tab: '⇥' }
+const MOD_NAMES = MAC ? { Mod: '⌘', Ctrl: '⌃', Alt: '⌥', Shift: '⇧' } : { Mod: 'Ctrl', Ctrl: 'Ctrl', Alt: 'Alt', Shift: 'Maj' }
+function fmtCombo(c) {
+  const parts = normCombo(c).split('+')
+  const key = parts.pop()
+  const names = [...parts.map((m) => MOD_NAMES[m] || m), KEY_NAMES[key] || key]
+  return MAC ? names.join('') : names.join('+')
+}
+const kbd = (c) => h('kbd', {}, fmtCombo(c))
+
+/** id → touches, réglages de la personne compris */
+function keyBindings() {
+  const user = (srv.editor && srv.editor.keybindings) || {}
+  const out = {}
+  for (const [id, , , def] of KEYMAP) out[id] = (Array.isArray(user[id]) ? user[id] : def).map(normCombo)
+  return out
+}
+let keyIndexOf = ''
+let keyIndex = new Map()
+function keyIndexNow() {
+  const sig = JSON.stringify((srv.editor && srv.editor.keybindings) || {})
+  if (sig !== keyIndexOf) {
+    keyIndexOf = sig
+    keyIndex = new Map()
+    for (const [id, list] of Object.entries(keyBindings())) for (const c of list) if (!keyIndex.has(c)) keyIndex.set(c, id)
+  }
+  return keyIndex
+}
+const firstKey = (id) => { const k = keyBindings()[id]; return k && k.length ? fmtCombo(k[0]) : '' }
+
+const isTyping = (t) => !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)
+const modalOpen = () => [...document.querySelectorAll('.modal.show')].map((m) => m.id)
+
+function onShortcut(e) {
+  if (recordingKey) return recordKey(e)
+  if (e.key === 'Escape') { closeQo(); closeSettings(); closeKeys() }
+  const c = comboOf(e)
+  if (!c) return
+  const id = keyIndexNow().get(c)
+  if (!id) return
+  // une fenêtre ouverte garde ses touches (Ctrl+S du JSON, flèches de l'ouverture rapide), sauf l'aide elle-même
+  const open = modalOpen()
+  if (open.length && !(id === 'help' && open.every((m) => m === 'keys'))) return
+  // une touche seule (« ? ») s'écrit dans un champ ; avec Ctrl, Alt, Cmd ou une touche F, c'est un raccourci
+  if (!/^(Mod|Ctrl|Alt)\+/.test(c) && !/(^|\+)F\d+$/.test(c) && isTyping(e.target)) return
+  if (runShortcut(id) === false) return // rien à faire ici : la touche garde son effet habituel
+  e.preventDefault()
+  e.stopPropagation()
+}
+
+/** l'éditeur de code affiché (pas celui du prompt) */
+function codeEditor() {
+  if (view.kind === 'run' || !cur) return null
+  if (!$('diff').hidden) return diff.getModifiedEditor()
+  if (!$('ed').hidden) return editor
+  return null
+}
+const hunksHere = () => (view.kind === 'file' && cur && !$('diff').hidden && files.get(cur)?.hunkInfo) || []
+function hunkAtCursor() {
+  const list = hunksHere()
+  if (!list.length) return null
+  const ln = diff.getModifiedEditor().getPosition()?.lineNumber || 1
+  return list.find((x) => ln >= x.start && ln <= x.end) || list.find((x) => x.start >= ln) || list[list.length - 1]
+}
+function gotoHunk(x) {
+  const ed = diff.getModifiedEditor()
+  ed.setPosition({ lineNumber: x.start, column: 1 })
+  ed.revealLineInCenter(x.start)
+  ed.focus()
+}
+async function stepHunk(dir) {
+  const list = hunksHere()
+  const ln = list.length ? diff.getModifiedEditor().getPosition()?.lineNumber || 0 : 0
+  const x = dir > 0 ? list.find((y) => y.start > ln) : [...list].reverse().find((y) => y.start < ln)
+  if (x) return gotoHunk(x)
+  // plus rien dans ce fichier : le fichier en revue suivant (ou précédent)
+  const paths = srv.changes.map((c) => c.path)
+  if (!paths.length) return toast('Aucun fichier en revue')
+  const i = paths.indexOf(cur)
+  const next = i < 0 ? paths[dir > 0 ? 0 : paths.length - 1] : paths[(i + dir + paths.length) % paths.length]
+  if (next === cur && list.length) return gotoHunk(dir > 0 ? list[0] : list[list.length - 1])
+  pendingHunk = dir > 0 ? 'first' : 'last'
+  setTimeout(() => (pendingHunk = null), 2000)
+  await openFile(next)
+}
+function stepTab(dir) {
+  const list = tabList()
+  if (!list.length) return false
+  const i = view.kind === 'file' ? list.indexOf(cur) : -1
+  openFile(list[i < 0 ? (dir > 0 ? 0 : list.length - 1) : (i + dir + list.length) % list.length])
+}
+function setSideHidden(hidden) {
+  P.sideHidden = hidden
+  document.getElementById('app').classList.toggle('noside', hidden)
+  savePrefs()
+}
+/** le curseur est dans le code (ou nulle part où l'on écrit) : pas dans le prompt ni dans un champ */
+const inCode = () => { const ed = codeEditor(); return !!ed && (ed.hasTextFocus() || !isTyping(document.activeElement)) }
+const CODE_ONLY = new Set(['review.accept', 'review.reject', 'review.acceptFile', 'review.comment', 'code.prompt', 'code.idea', 'goto.line'])
+const lastRun = () => [...runs.values()].sort((a, b) => b.started - a.started)[0]
+
+/** Fait l'action ; false quand elle n'a pas de sens ici (la touche garde alors son effet habituel). */
+function runShortcut(id) {
+  if (CODE_ONLY.has(id) && !inCode()) return false
+  if (id.startsWith('panel.')) {
+    if (P.sideHidden) setSideHidden(false)
+    const name = id.slice(6)
+    showPanel(name)
+    if (name === 'search') { $('q').focus(); $('q').select() }
+    return
+  }
+  switch (id) {
+    case 'review.next': return void stepHunk(1)
+    case 'review.prev': return void stepHunk(-1)
+    case 'review.accept': {
+      const x = hunkAtCursor()
+      if (!x) return false
+      if (srv.accepted.includes(x.key)) return toast('Bloc déjà validé')
+      acceptHunks(cur, [x.key])
+      // on passe au bloc suivant, comme dans une revue GitHub
+      const list = hunksHere()
+      const after = list[list.indexOf(x) + 1]
+      if (after) gotoHunk(after)
+      return
+    }
+    case 'review.reject': {
+      const x = hunkAtCursor()
+      if (!x) return false
+      return void rejectHunk(x.c, x.orig, x.mod)
+    }
+    case 'review.acceptFile':
+      if ($('fileOk').hidden || view.kind !== 'file') return false
+      return void $('fileOk').click()
+    case 'review.comment': {
+      const ed = codeEditor()
+      if (!ed || view.kind !== 'file') return false
+      const sel = ed.getSelection()
+      if (!sel) return false
+      const end = sel.endColumn === 1 && sel.endLineNumber > sel.startLineNumber ? sel.endLineNumber - 1 : sel.endLineNumber
+      return startComment(sel.startLineNumber, end)
+    }
+    case 'review.submit':
+      if (!(srv.review || []).length) return toast('Rien à soumettre : la revue est vide')
+      return submitReview()
+    case 'tab.next': return stepTab(1)
+    case 'tab.prev': return stepTab(-1)
+    case 'tab.close':
+      if (view.kind !== 'file' || !cur) return false
+      if (isChanged(cur)) return toast('Ce fichier est en revue : valide-le pour pouvoir fermer son onglet')
+      return closeTab(cur)
+    case 'file.open': return void quickOpen()
+    case 'file.save': return void save()
+    case 'search': { if (P.sideHidden) setSideHidden(false); showPanel('search'); $('q').focus(); $('q').select(); return }
+    case 'goto.line': {
+      const ed = codeEditor()
+      if (!ed) return false
+      ed.focus()
+      return ed.trigger('kb', 'editor.action.gotoLine', null)
+    }
+    case 'side.toggle': return setSideHidden(!P.sideHidden)
+    case 'prompt.focus':
+      if (promptEd.hasTextFocus()) { const ed = codeEditor(); if (ed) ed.focus(); else document.activeElement?.blur() }
+      else promptEd.focus()
+      return
+    case 'code.prompt':
+    case 'code.idea': {
+      const ed = codeEditor()
+      if (!ed) return false
+      return ed.trigger('kb', id === 'code.prompt' ? 'mi.prompt' : 'mi.idea', null)
+    }
+    case 'run.again': {
+      const r = view.kind === 'run' ? runs.get(view.id) : lastRun()
+      if (!r) return toast('Aucune commande lancée pour l\'instant')
+      if (r.running) return toast(`« ${r.name} » tourne encore`)
+      return void runCommand(r.command, r.name)
+    }
+    case 'run.stop': {
+      const r = view.kind === 'run' && runs.get(view.id)?.running ? runs.get(view.id) : [...runs.values()].filter((x) => x.running).sort((a, b) => b.started - a.started)[0]
+      if (!r) return toast('Aucune commande en cours')
+      return void stopRun(r.id)
+    }
+    case 'help': return $('keys').classList.contains('show') ? closeKeys() : openKeys()
+  }
+  return false
+}
+
+// la fenêtre d'aide
+function openKeys() {
+  const kb = keyBindings()
+  const groups = new Map()
+  const add = (g, label, list) => { if (!groups.has(g)) groups.set(g, []); groups.get(g).push([label, list]) }
+  for (const [id, g, label] of KEYMAP) add(g, label, kb[id])
+  for (const [g, label, list] of FIXED_KEYS) add(g, label, list)
+  $('keysBody').replaceChildren(...[...groups].map(([g, rows]) => h('section', {}, h('h3', {}, g),
+    ...rows.map(([label, list]) => h('div', { class: 'krow' }, h('span', {}, label), h('span', { class: 'k' }, ...(list.length ? list.map(kbd) : [h('span', { class: 'hint' }, 'aucun')])))))))
+  $('keys').classList.add('show')
+}
+function closeKeys() { $('keys').classList.remove('show') }
+
+// ⚙️ Raccourcis : changer, ajouter, retirer, réinitialiser
+function putKeys(next) {
+  const settings = { ...(srv.editor || {}) }
+  if (next && Object.keys(next).length) settings.keybindings = next
+  else delete settings.keybindings
+  srv.editor = settings
+  event({ type: 'editor.set', settings })
+  updatePromptHint()
+  renderSettings()
+}
+function recordKey(e) {
+  if (['Control', 'Shift', 'Alt', 'Meta', 'AltGraph', 'CapsLock'].includes(e.key)) return
+  e.preventDefault()
+  e.stopPropagation()
+  const id = recordingKey
+  recordingKey = null
+  if (e.key === 'Escape') return renderSettings()
+  const c = comboOf(e)
+  if (!c) return renderSettings()
+  const kb = keyBindings()
+  const user = { ...((srv.editor && srv.editor.keybindings) || {}) }
+  // une touche ne fait qu'une chose : on la retire de l'action qui l'avait
+  for (const [other, list] of Object.entries(kb)) {
+    if (other !== id && list.includes(c)) {
+      user[other] = list.filter((x) => x !== c)
+      toast(`${fmtCombo(c)} servait à « ${KEYMAP.find((k) => k[0] === other)[2]} » : retiré de cette action`)
+    }
+  }
+  user[id] = [...new Set([...kb[id], c])]
+  putKeys(user)
+}
+function renderKeySettings(body) {
+  const kb = keyBindings()
+  const user = (srv.editor && srv.editor.keybindings) || {}
+  body.append(
+    h('p', { class: 'hint' }, `Pour toi, dans tous les projets. « + » puis la combinaison voulue ; Échap annule. ${MAC ? 'Sur Mac, les raccourcis à lettre utilisent ⌃ : avec ⌥, la lettre tape un caractère ({, [, |…).' : ''}`),
+    h('div', { class: 'subtabs' }, h('button', { onclick: () => putKeys({}) }, '↺ Tout réinitialiser'), h('button', { onclick: () => { closeSettings(); openKeys() } }, '⌨️ Voir la liste')))
+  let group = ''
+  for (const [id, g, label, def] of KEYMAP) {
+    if (g !== group) { group = g; body.append(h('h3', {}, g)) }
+    const list = kb[id]
+    const custom = Array.isArray(user[id])
+    const ctl = h('div', { class: 'kedit' },
+      ...list.map((c) => h('kbd', {}, fmtCombo(c), h('span', { class: 'x', title: 'Retirer', onclick: () => putKeys({ ...user, [id]: list.filter((x) => x !== c) }) }, '✕'))),
+      recordingKey === id
+        ? h('span', { class: 'rec' }, 'Appuie sur la combinaison…')
+        : h('button', { title: 'Ajouter une touche', onclick: () => { recordingKey = id; renderSettings() } }, '+'),
+      custom ? h('button', { title: `Par défaut : ${def.map(fmtCombo).join(', ')}`, onclick: () => { const u = { ...user }; delete u[id]; putKeys(u) } }, '↺') : null)
+    body.append(setRow(label, custom ? 'modifié' : '', ctl))
+  }
+}
+function updatePromptHint() {
+  const qo = firstKey('file.open')
+  $('qoKey').textContent = qo
+  $('qoKey').hidden = !qo
+  for (const el of document.querySelectorAll('.qoKey2')) el.textContent = qo || '🔎 Ouvrir'
+  for (const el of document.querySelectorAll('.lKey')) el.textContent = firstKey('code.prompt') || '✍'
+  $('promptSend').title = `Envoyer à Claude (${fmtCombo('Mod+Enter')})`
+  const k = firstKey('code.prompt')
+  $('promptHint').textContent = `@ fichier · @fichier:lignes · / commandes et skills · #i idée${k ? ` · ${k} dans le code : mentionner la sélection` : ''} · ↑ ↓ prompts précédents · ${fmtCombo('Mod+Enter')} : envoyer · ${firstKey('help') || '?'} : raccourcis`
+}
+
 // ---------- fenêtre des paramètres ----------
 let setTab = 'editor'
 let setJson = null       // l'éditeur JSON des paramètres
@@ -1493,7 +1850,7 @@ function control(kind, value, onchange, opts = {}) {
 }
 function renderSettings() {
   const nav = $('setNav')
-  nav.replaceChildren(...[['editor', '✏️ Éditeur'], ['ide', '🧩 IDE for Claude'], ['claude', '✳️ Claude Code']].map(([k, label]) =>
+  nav.replaceChildren(...[['editor', '✏️ Éditeur'], ['keys', '⌨️ Raccourcis'], ['ide', '🧩 IDE for Claude'], ['claude', '✳️ Claude Code']].map(([k, label]) =>
     h('button', { class: setTab === k ? 'cur' : '', onclick: () => openSettings(k) }, label)))
   const body = $('setBody')
   body.replaceChildren()
@@ -1504,16 +1861,19 @@ function renderSettings() {
     body.append(h('p', { class: 'hint' }, 'Pour toi, dans tous les projets. Les noms suivent le settings.json de VS Code.'),
       h('div', { class: 'subtabs' },
         h('button', { onclick: () => event({ type: 'editor.importVSCode' }) }, '⇣ Importer mon settings.json de VS Code'),
-        h('button', { onclick: () => { srv.editor = {}; event({ type: 'editor.set', settings: {} }); applyEditorSettings(); renderSettings() } }, '↺ Réinitialiser')))
+        h('button', { onclick: () => { const kb = srv.editor && srv.editor.keybindings; srv.editor = kb ? { keybindings: kb } : {}; event({ type: 'editor.set', settings: srv.editor }); applyEditorSettings(); renderSettings() } }, '↺ Réinitialiser')))
     for (const [k, label, kind, def] of EDITOR_FIELDS) body.append(setRow(label, k, control(kind, settings[k] ?? def, (v) => put(k, v))))
     body.append(h('h3', {}, 'settings.json de l\'éditeur'), h('p', { class: 'hint' }, 'Toutes les options de Monaco y passent (« editor.xxx »). Ctrl+S pour enregistrer.'))
     body.append(jsonBox('editor', JSON.stringify(settings, null, 2)))
+  } else if (setTab === 'keys') {
+    renderKeySettings(body)
   } else if (setTab === 'ide') {
     const ide = srv.ide || {}
     const put = (k, v) => { srv.ide = { ...ide, [k]: v }; event({ type: 'ide.set', settings: { [k]: v } }); renderStatus() }
     const putP = (k, v) => { P[k] = v; savePrefs() }
     body.append(h('h3', {}, 'Claude et la revue'),
       setRow('Ouvrir le panneau du terminal tout seul', 'À la première modif de Claude, quand la page web n\'est pas ouverte', control('bool', ide.autoOpenPane, (v) => put('autoOpenPane', v))),
+      setRow('Validation automatique', 'Dès qu\'un prompt part, tous les fichiers encore en revue sont validés d\'office', control('bool', !!ide.autoAccept, (v) => put('autoAccept', v))),
       setRow('Joindre la revue au prochain prompt', 'Commentaires, rejets, idées et extraits partent avec ton prochain prompt', control('bool', ide.attachReview, (v) => put('attachReview', v))),
       setRow('Conserver l\'historique', 'En jours, pour chaque session', control('number', ide.historyDays, (v) => put('historyDays', v))),
       h('h3', {}, 'Page web (ce projet)'),
@@ -1638,6 +1998,7 @@ async function refreshState() {
   renderAnns()
   renderRuns()
   renderDock()
+  updatePromptHint()
   renderStatus()
   applyEditorSettings()
   $('allOk').hidden = !srv.changes.length
@@ -1767,8 +2128,6 @@ require(['vs/editor/editor.main'], async () => {
   const both = [editor, diff.getModifiedEditor()]
   for (const ed of both) {
     const bucket = ed === editor ? 'ed' : 'diff'
-    ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => save())
-    ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyP, () => quickOpen())
     const selected = (e) => {
       const sel = e.getSelection()
       const m = e.getModel()
@@ -1779,9 +2138,7 @@ require(['vs/editor/editor.main'], async () => {
       return { path: cur, line: s.startLineNumber, endLine: end, code: m.getValueInRange(s) }
     }
     ed.addAction({
-      id: 'mi.prompt', label: '✍ Joindre la sélection au prompt', contextMenuGroupId: 'navigation', contextMenuOrder: 0,
-      // Cmd+L, et la vraie touche Ctrl+L : sur Mac, Chrome peut garder Cmd+L pour sa barre d'adresse
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyL, monaco.KeyMod.WinCtrl | monaco.KeyCode.KeyL],
+      id: 'mi.prompt', label: '✍ Mentionner la sélection dans le prompt', contextMenuGroupId: 'navigation', contextMenuOrder: 0,
       run: (e) => {
         const x = selected(e)
         if (!x) return
@@ -1790,7 +2147,6 @@ require(['vs/editor/editor.main'], async () => {
     })
     ed.addAction({
       id: 'mi.idea', label: '💡 Nouvelle idée depuis la sélection', contextMenuGroupId: 'navigation', contextMenuOrder: 0.5,
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyI],
       run: (e) => {
         const x = selected(e)
         if (!x) return
@@ -1971,14 +2327,14 @@ require(['vs/editor/editor.main'], async () => {
     addEventListener('mouseup', up)
   })
 
-  // raccourcis globaux
-  window.addEventListener('keydown', (e) => {
-    const mod = e.ctrlKey || e.metaKey
-    if (mod && !e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); save() }
-    if (mod && !e.shiftKey && e.key.toLowerCase() === 'p') { e.preventDefault(); quickOpen() }
-    if (mod && e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); showPanel('search'); $('q').focus(); $('q').select() }
-    if (e.key === 'Escape') { closeQo(); closeSettings() }
-  }, true)
+  // raccourcis : un seul écouteur, avant Monaco, pour toute la page
+  window.addEventListener('keydown', onShortcut, true)
+  navigator.keyboard?.getLayoutMap?.().then((m) => (layoutMap = m)).catch(() => {})
+  $('keysBtn').onclick = () => openKeys()
+  $('keysClose').onclick = () => closeKeys()
+  $('keysEdit').onclick = () => { closeKeys(); openSettings('keys') }
+  $('keys').addEventListener('mousedown', (e) => { if (e.target === $('keys')) closeKeys() })
+  updatePromptHint()
   window.addEventListener('beforeunload', (e) => {
     rememberView()
     for (const f of files.values()) if (f.model.getValue() !== f.base) { e.preventDefault(); return }

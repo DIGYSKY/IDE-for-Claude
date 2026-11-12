@@ -159,3 +159,21 @@ test('« Tout accepter » d’un prompt sort ses fichiers de la revue', async ($
   expect(changes).toEqual([])
   expect(accepted).toEqual([])
 })
+
+test('validation automatique : dès qu’un prompt part, tout ce qui est en revue est validé', async ($, on) => {
+  oneFile(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('store.get', (_$, e) => ({ value: (e as unknown as { key: string }).key === 'ide' ? { autoAccept: true } : undefined }))
+  on('prompt.submit', (_$, e) => ({ text: e.text }))
+  let changes: { path: string }[] = []
+  on('state.set', ($, e, next) => {
+    const w = e as unknown as { key: string; value: { value: unknown } }
+    if (w.key === 'changes') changes = w.value.value as { path: string }[]
+    return next(e)
+  })
+
+  await $.tool.call({ tool: 'Write', file_path: '/p/a.txt', content: 'un\n' })
+  expect(changes.map(c => c.path)).toEqual(['/p/a.txt'])
+  await $.prompt.submit({ text: 'la suite' } as never)
+  expect(changes).toEqual([])
+})
