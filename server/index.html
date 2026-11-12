@@ -204,7 +204,7 @@
       <span class="path" id="path"></span>
       <span class="spacer"></span>
       <span class="seg" id="cmpSeg" title="Base du diff"><button data-c="claude">Claude</button><button data-c="git">git HEAD</button></span>
-      <button id="fileOk" title="Valider visuellement tout le fichier">✅ Fichier</button>
+      <button id="fileOk" title="Valider tout le fichier : sa revue est close pour ce prompt">✅ Fichier</button>
       <button id="fileNo" title="Remettre tout le fichier dans son état d'avant">❌ Fichier</button>
       <button id="toggleSide" title="Une colonne ou deux">⇆</button>
       <button id="toggleFold" title="Replier les lignes inchangées">Replier</button>
@@ -391,6 +391,16 @@ async function renderTree() {
 
 // ---------- onglets ----------
 function hunkKeysOf(p) { return srv.accepted.filter((k) => k.startsWith(p + '|')) }
+/** Valide des blocs ; si plus rien n'attend dans le fichier, sa revue est close pour ce prompt :
+ *  il repasse en édition normale et garde un onglet ordinaire, qu'on peut fermer. */
+function acceptHunks(p, keys) {
+  const f = files.get(p)
+  const done = f && f.hunks.length > 0 && f.hunks.every((k) => keys.includes(k) || srv.accepted.includes(k))
+  if (!done) return event({ type: 'accept', keys, on: true })
+  if (!tabs.includes(p)) tabs.push(p)
+  savePrefs()
+  event({ type: 'acceptFile', path: p })
+}
 function renderTabs() {
   const list = [...new Set([...srv.changes.map((c) => c.path), ...tabs])]
   const box = $('tabs')
@@ -638,7 +648,7 @@ function renderZones() {
       const end = c.modifiedEndLineNumber === 0 ? start : c.modifiedEndLineNumber
       const node = stop(h('div', { class: 'zone hunk' + (ok ? ' ok' : '') },
         h('span', {}, ok ? '✅ Validé' : '✏️ Bloc modifié par Claude'),
-        h('button', { class: 'okb', onclick: () => event({ type: 'accept', keys: [key], on: !ok }) }, ok ? 'Annuler la validation' : '✅ Accepter'),
+        h('button', { class: 'okb', onclick: () => (ok ? event({ type: 'accept', keys: [key], on: false }) : acceptHunks(cur, [key])) }, ok ? 'Annuler la validation' : '✅ Accepter'),
         h('button', { class: 'badb', onclick: () => rejectHunk(c, orig, mod) }, '❌ Rejeter'),
         h('button', { onclick: () => startComment(Math.min(start, max), Math.min(end, max)) }, '💬 Commenter'),
       ))
@@ -1089,8 +1099,7 @@ require(['vs/editor/editor.main'], async () => {
   $('fileOk').onclick = () => {
     const f = files.get(cur)
     if (!f || !f.hunks.length) return
-    const all = f.hunks.every((k) => srv.accepted.includes(k))
-    event({ type: 'accept', keys: f.hunks, on: !all })
+    acceptHunks(cur, f.hunks)
   }
   $('fileNo').onclick = () => rejectFile()
   for (const b of $('cmpSeg').children) b.onclick = () => {

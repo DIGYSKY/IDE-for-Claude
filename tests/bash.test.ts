@@ -80,6 +80,20 @@ test('suit les fichiers modifiés et créés par Bash, avec le sous-agent', asyn
   expect(files.some(f => f.path === '/p/src/c.txt')).toBe(false)
 
   expect(p.state.changes.map(c => c.path).sort()).toEqual(['/p/a.txt', '/p/b.txt'])
+})
+
+test('un fichier de la revue supprimé par Bash en sort', async ($, on) => {
+  const p = project(on)
+  let step = 0
+  on('tool.call', { tool: 'Bash' }, () => {
+    if (step++ === 0) p.put('/p/src/c.txt', 'modifié\n')
+    else p.files.delete('/p/src/c.txt')
+    return { result: { stdout: '', stderr: '', interrupted: false } }
+  })
+  await $.tool.call({ tool: 'Bash', command: 'echo modifié > src/c.txt' })
+  expect(p.state.changes.map(c => c.path)).toEqual(['/p/src/c.txt'])
+  await $.tool.call({ tool: 'Bash', command: 'rm src/c.txt' })
+  expect(p.state.changes).toEqual([])
   expect(p.state.changes.every(c => c.agent === 'general-purpose · renomme')).toBe(true)
 })
 

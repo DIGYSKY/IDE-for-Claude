@@ -341,6 +341,8 @@ async function diffSnapshot($: $, snap: Snapshot, who: Who) {
     await update($, noticeAtom, () => `⚠️ Modifié par Bash, sans diff (projet trop gros) : ${cut(list, 200)}`)
   }
   if (gone.length) {
+    for (const p of gone) await closeReview($, p)
+    void pushChanges($).catch(() => undefined)
     const list = gone.map(p => relTo(cwd, p)).join(', ')
     await update($, noticeAtom, () => `🗑️ Supprimé par Bash : ${cut(list, 200)}`)
     void notify($, { type: 'toast', text: `🗑️ Claude a supprimé ${gone.length > 1 ? `${gone.length} fichiers` : list} avec Bash` })
@@ -547,6 +549,13 @@ async function onWebEvent($: $, ev: WebEvent) {
       await update($, acceptedAtom, list => (ev.on ? [...new Set([...list, ...keys])] : list.filter(k => !keys.has(k))))
       break
     }
+    case 'acceptFile':
+      // tout le fichier est validé : sa revue est close pour ce prompt. Il redevient un fichier
+      // ordinaire (édition normale, onglet fermable) ; une nouvelle modif de Claude le rouvre.
+      if (!ev.path) break
+      await closeReview($, ev.path)
+      await notify($, { type: 'toast', text: `✅ ${relTo(cwd, ev.path)} validé : revue close pour ce prompt` })
+      break
     case 'sendReview': {
       const block = await reviewBlock($)
       if (!block) break
@@ -651,6 +660,21 @@ function startWeb($: $): Promise<string> {
   return server
 }
 
+/** Retire un fichier de la revue en cours : plus de surlignage ni de blocs validés pour lui. */
+async function closeReview($: $, path: string) {
+  await update($, changesAtom, list => list.filter(c => c.path !== path))
+  await update($, acceptedAtom, list => list.filter(k => !k.startsWith(path + '|')))
+}
+
+/** Les fichiers de la revue qui n'existent plus (supprimés hors de la page) en sortent. */
+async function pruneGone($: $) {
+  const list = await read($, changesAtom)
+  const gone: string[] = []
+  for (const c of list) if (!(await $.fs.exists(c.path).catch(() => true))) gone.push(c.path)
+  for (const p of gone) await closeReview($, p)
+  return gone.length > 0
+}
+
 /** La page web a écrit un fichier. Une sauvegarde à toi efface le surlignage Claude ; un rejet de bloc le garde. */
 async function onWebSave($: $, path: string, dropHighlight = true) {
   if (dropHighlight) await update($, changesAtom, list => list.filter(c => c.path !== path))
@@ -715,6 +739,8 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'ide-for-claude', description: 'Ouvre l’éditeur (option : un fichier)' })
     await $.command.register({ name: 'ide-for-claude-web', description: 'Ouvre IDE for Claude dans le navigateur (Monaco, diff des modifs de Claude)' })
+    // une session reprise peut garder dans sa revue des fichiers supprimés depuis
+    await pruneGone($).catch(() => false)
     // après un rechargement de la mod, on relance le serveur sur le même port : la page ouverte se reconnecte
     if (await read($, webAtom)) void startWeb($).catch(() => undefined)
     return next(e)

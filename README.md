@@ -44,7 +44,8 @@ On peut passer de l'une à l'autre : la touche `w` du panneau ouvre la page web 
 ## Le mode navigateur
 
 - Diff des modifications de Claude (une ou deux colonnes, lignes inchangées repliées)
-- Review façon GitHub : ✅ accepter (visuel), ❌ rejeter un bloc ou un fichier, 💬 commenter une ligne
+- Review façon GitHub : ✅ accepter un bloc ou tout le fichier, ❌ rejeter un bloc ou un fichier, 💬 commenter une ligne
+- Un fichier dont tous les blocs sont acceptés sort de la revue de ce prompt : il repasse en édition normale et son onglet se ferme comme les autres. Une nouvelle modif de Claude le remet en revue
 - `Ctrl+L` : joindre la sélection pour Claude
 - Commentaires, rejets et extraits partent discrètement avec le prochain prompt, ou avec « Envoyer maintenant »
 - Historique prompt par prompt, diff de toute la session, ↶ revenir avant un prompt ; chaque fichier indique le sous-agent (🤖) et l'outil (⚙️ Bash, 📓 notebook) quand ce n'est pas Claude avec `Edit`/`Write`
