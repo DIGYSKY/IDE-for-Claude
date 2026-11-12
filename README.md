@@ -64,6 +64,14 @@ On peut passer de l'une à l'autre : la touche `w` du panneau ouvre la page web 
 
 Sur macOS, `Cmd` marche à la place de `Ctrl`.
 
+## Ce qui est enregistré
+
+| Quoi | Portée | Où |
+|---|---|---|
+| Historique des prompts, revue en cours (modifs, commentaires, blocs validés) | par session : retrouvés avec `claude --resume` | `~/.claude/plugins/data/ide-for-claude/sessions/<session>.json`, effacé après 30 jours |
+| Page web : onglets ouverts, fichier affiché, position dans chaque fichier, une ou deux colonnes, lignes inchangées repliées ou non, base du diff, panneau latéral, notifications, commande de test | par projet | stockage de la mod (`$.store`) |
+| Panneau terminal : tout voir / replier, arbre affiché ou non | pour toutes les sessions | stockage de la mod (`$.store`) |
+
 ## Prérequis
 
 - Claude Code 2.1.275 ou plus récent (installation en une commande, mods / hooks modules)

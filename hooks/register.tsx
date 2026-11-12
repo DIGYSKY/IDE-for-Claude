@@ -447,6 +447,85 @@ async function reviewBlock($: $): Promise<string | null> {
   ].join('\n')
 }
 
+// ---------- persistance : l'historique d'une session survit au redémarrage ----------
+// $.state ne vit que le temps du processus, et $.store est limité à 4 Mo pour toute la mod :
+// chaque session a donc son fichier, ~/.claude/plugins/data/ide-for-claude/sessions/<id>.json.
+// `claude --resume` retrouve le même id (le nom de la transcription) et donc le même historique.
+const KEEP_DAYS = 30
+type Saved = { v: 1; cwd: string; savedAt: number; history: Turn[]; changes: Change[]; review: ReviewItem[]; accepted: string[] }
+
+let sessionsDir: string | null = null
+async function dataDir($: $) {
+  if (sessionsDir) return sessionsDir
+  const config =
+    (await $.env.get('CLAUDE_CONFIG_DIR')) || `${(await $.env.get('HOME')) || (await $.env.get('USERPROFILE')) || ''}/.claude`
+  sessionsDir = `${config}/plugins/data/ide-for-claude/sessions`
+  return sessionsDir
+}
+
+async function sessionFile($: $) {
+  const id = await $.session.id().catch(() => '')
+  return id && /^[\w.-]+$/.test(id) ? `${await dataDir($)}/${id}.json` : null
+}
+
+/** Écrit l'état de revue de la session sur le disque. Ne rejette jamais. */
+async function persist($: $) {
+  try {
+    const file = await sessionFile($)
+    if (!file) return
+    const history = (await read($, historyAtom)).filter(t => t.files.length > 0)
+    const changes = await read($, changesAtom)
+    const review = await read($, reviewAtom)
+    // une session sans aucune modif ne laisse pas de fichier ; une revue vidée met le sien à jour
+    if (!history.length && !changes.length && !review.length && !(await $.fs.exists(file))) return
+    const data: Saved = { v: 1, cwd: await $.session.cwd(), savedAt: Date.now(), history, changes, review, accepted: await read($, acceptedAtom) }
+    await $.fs.write(file, JSON.stringify(data))
+  } catch {
+    // disque plein, dossier refusé... l'historique reste en mémoire pour la session
+  }
+}
+
+/** Au démarrage d'une session reprise : on retrouve son historique et sa revue en cours. */
+async function restoreSession($: $) {
+  if ((await read($, historyAtom)).length || (await read($, changesAtom)).length) return
+  const file = await sessionFile($)
+  if (!file) return
+  const text = await $.fs.read(file).catch(() => null)
+  if (typeof text !== 'string') return
+  let data: Partial<Saved>
+  try {
+    data = JSON.parse(text)
+  } catch {
+    return
+  }
+  if (data.v !== 1 || !Array.isArray(data.history)) return
+  await update($, historyAtom, () => data.history!)
+  if (Array.isArray(data.changes)) await update($, changesAtom, () => data.changes!.map(c => ({ ...c, stale: true })))
+  if (Array.isArray(data.review)) await update($, reviewAtom, () => data.review!)
+  if (Array.isArray(data.accepted)) await update($, acceptedAtom, () => data.accepted!)
+}
+
+/** Les historiques de plus de 30 jours sont effacés. */
+async function pruneSessions($: $) {
+  const dir = await dataDir($)
+  const old = Date.now() - KEEP_DAYS * 24 * 3600_000
+  for (const x of await $.fs.list(dir).catch(() => [])) {
+    if (x.kind === 'file' && x.name.endsWith('.json') && x.mtimeMs < old)
+      await $.process.run(['rm', '-f', '--', `${dir}/${x.name}`]).catch(() => undefined)
+  }
+}
+
+// ---------- préférences du panneau terminal, pour toutes les sessions ----------
+const PANE_PREFS = 'pane'
+async function loadPanePrefs($: $) {
+  const p = (await $.store.get(PANE_PREFS).catch(() => undefined)) as { full?: boolean; showTree?: boolean } | undefined
+  if (typeof p?.full === 'boolean') await update($, fullAtom, () => p.full!)
+  if (typeof p?.showTree === 'boolean') await update($, showTreeAtom, () => p.showTree!)
+}
+async function savePanePrefs($: $) {
+  await $.store.set(PANE_PREFS, { full: await read($, fullAtom), showTree: await read($, showTreeAtom) }).catch(() => undefined)
+}
+
 // ---------- préférences du navigateur, par projet ----------
 const prefsKey = (cwd: string) => `prefs:${cwd}`
 
@@ -585,6 +664,7 @@ async function onWebEvent($: $, ev: WebEvent) {
       return
   }
   void pushChanges($).catch(() => undefined)
+  void persist($)
 }
 
 /** Démarre le serveur de cette session s'il ne tourne pas, et rend son adresse. */
@@ -739,8 +819,11 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'ide-for-claude', description: 'Ouvre l’éditeur (option : un fichier)' })
     await $.command.register({ name: 'ide-for-claude-web', description: 'Ouvre IDE for Claude dans le navigateur (Monaco, diff des modifs de Claude)' })
-    // une session reprise peut garder dans sa revue des fichiers supprimés depuis
+    // une session reprise retrouve son historique ; ses fichiers supprimés depuis sortent de la revue
+    await restoreSession($).catch(() => undefined)
     await pruneGone($).catch(() => false)
+    await loadPanePrefs($).catch(() => undefined)
+    void pruneSessions($).catch(() => undefined)
     // après un rechargement de la mod, on relance le serveur sur le même port : la page ouverte se reconnecte
     if (await read($, webAtom)) void startWeb($).catch(() => undefined)
     return next(e)
@@ -773,9 +856,11 @@ export const register: Register = on => {
       await update($, reviewAtom, () => [])
       void pushChanges($).catch(() => undefined)
       void notify($, { type: 'toast', text: '📨 Review jointe à ton prompt' })
+      void persist($)
       return next({ ...e, context: [...(e.context ?? []), block] })
     }
     void pushChanges($).catch(() => undefined)
+    void persist($)
     return next(e)
   })
 
@@ -814,7 +899,10 @@ export const register: Register = on => {
 
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
-    if (e.agentId === undefined && (await read($, webAtom))) void notify($, { type: 'done' })
+    if (e.agentId === undefined) {
+      await persist($)
+      if (await read($, webAtom)) void notify($, { type: 'done' })
+    }
     return done
   })
 
@@ -994,9 +1082,9 @@ export const register: Register = on => {
         {file && mode === 'edit' && <Button key="view" hotkey="v" plain onPress={() => void update($, modeAtom, () => 'view' as Mode)}>Voir</Button>}
         {file && <Button key="save" hotkey="s" plain onPress={() => void save($)}>Sauver</Button>}
         {change && mode === 'view' && (
-          <Button key="full" hotkey="a" plain onPress={() => void update($, fullAtom, v => !v)}>{full ? 'Replier' : 'Tout voir'}</Button>
+          <Button key="full" hotkey="a" plain onPress={() => void update($, fullAtom, v => !v).then(() => savePanePrefs($))}>{full ? 'Replier' : 'Tout voir'}</Button>
         )}
-        <Button key="tree" hotkey="t" plain onPress={() => void update($, showTreeAtom, v => !v)}>{showTree ? 'Cacher arbre' : 'Arbre'}</Button>
+        <Button key="tree" hotkey="t" plain onPress={() => void update($, showTreeAtom, v => !v).then(() => savePanePrefs($))}>{showTree ? 'Cacher arbre' : 'Arbre'}</Button>
         {file && <Button key="reload" hotkey="r" plain onPress={() => void openFile($, file.path)}>Recharger</Button>}
         {hasUndo && <Button key="undo" hotkey="z" plain onPress={() => void undoSave($)}>Annuler sauvegarde</Button>}
         <Button key="web" hotkey="w" plain onPress={() => void openWeb($).catch(() => undefined)}>Navigateur</Button>

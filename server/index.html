@@ -321,6 +321,16 @@ function savePrefs() {
     event({ type: 'prefs', prefs: { ...P, tabs, cur } })
   }, 700)
 }
+// en quittant ou en masquant l'onglet, on enregistre tout de suite (sans attendre le délai)
+function flushPrefs() {
+  if (!prefsLoaded) return
+  clearTimeout(prefsTimer)
+  rememberView()
+  const body = JSON.stringify({ type: 'prefs', prefs: { ...P, tabs, cur } })
+  if (!navigator.sendBeacon || !navigator.sendBeacon(`/api/event?t=${encodeURIComponent(T)}`, body)) event(JSON.parse(body))
+}
+addEventListener('pagehide', flushPrefs)
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushPrefs() })
 function rememberView() {
   if (!cur || view.kind !== 'file') return
   const ed = !$('diff').hidden ? diff.getModifiedEditor() : editor
