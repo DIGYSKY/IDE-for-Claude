@@ -1,7 +1,7 @@
 // Serveur local d’IDE for Claude : un par session Claude, sur 127.0.0.1 seulement,
 // protégé par une clé aléatoire. Sans dépendance (Node 18+).
 //
-//   node server.mjs --root <projet> --token <clé> [--port <port>] [--name <nom>]
+//   node server.mjs --root <projet> --token <clé> [--port <port>] [--name <nom>] [--logs <dossier des journaux>]
 //
 // Sortie standard, une ligne JSON par message, lue par la mod :
 //   {"port": 4317}                 au démarrage
@@ -10,7 +10,8 @@
 
 import http from 'node:http'
 import fs from 'node:fs/promises'
-import { watchFile, unwatchFile, readFileSync, realpathSync } from 'node:fs'
+import { watchFile, unwatchFile, readFileSync, realpathSync, createWriteStream, mkdirSync } from 'node:fs'
+import os from 'node:os'
 import { execFile, spawn } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -231,6 +232,9 @@ const search = async (q, matchCase) => {
 // Chaque lancement tourne dans le shell du système, à la racine du projet, sans limite de durée
 // (un serveur de dev doit pouvoir tourner) ; sa sortie part en direct dans la page.
 const MAX_OUT = 1_000_000
+// la sortie complète de chaque lancement va dans un journal : Claude le lit lui-même quand on le joint
+const LOGS = args.logs || path.join(os.tmpdir(), 'ide-for-claude-runs')
+const MAX_LOG = 50_000_000
 const MAX_RUNS = 30
 /** id -> { id, name, command, started, ended, code, out, child } */
 const runs = new Map()
@@ -243,6 +247,8 @@ const runInfo = (r, withOut = false) => ({
   ended: r.ended,
   code: r.code,
   stopped: !!r.stopped,
+  log: r.log || null,
+  lines: r.lines || 0,
   running: !r.ended,
   ...(withOut ? { out: r.out } : { tail: r.out.slice(-2000) }),
 })
@@ -287,9 +293,17 @@ function startRun(command, name) {
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   r.child = child
+  const log = openLog(r)
+  let logged = 0
+  r.lines = 0
   const onData = (buf) => {
     const text = stripAnsi(buf.toString('utf8'))
     r.out = (r.out + text).slice(-MAX_OUT)
+    for (let i = text.indexOf('\n'); i !== -1; i = text.indexOf('\n', i + 1)) r.lines++
+    if (log && logged < MAX_LOG) {
+      log.write(text)
+      logged += text.length
+    }
     send({ type: 'run', phase: 'out', id: r.id, text })
   }
   child.stdout.on('data', onData)
@@ -297,6 +311,7 @@ function startRun(command, name) {
   const done2 = (code) => {
     if (r.ended) return
     Object.assign(r, { ended: Date.now(), code, child: null })
+    log?.end(`\n# fin : ${r.stopped ? 'arrêtée' : `code ${code}`}\n`)
     send({ type: 'run', phase: 'end', run: runInfo(r) })
   }
   child.on('error', (e) => {
@@ -305,6 +320,22 @@ function startRun(command, name) {
   })
   child.on('close', (code, signal) => done2(code ?? (signal ? -1 : 0)))
   return r
+}
+
+/** Le journal d'un lancement, ~/.claude/plugins/data/ide-for-claude/runs/<date>-<n>-<nom>.log */
+function openLog(r) {
+  try {
+    mkdirSync(LOGS, { recursive: true })
+    const slug = r.name.replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'commande'
+    r.log = path.join(LOGS, `${new Date(r.started).toISOString().replace(/[:.]/g, '-')}-${r.id}-${slug}.log`)
+    const log = createWriteStream(r.log)
+    log.on('error', () => (r.log = null))
+    log.write(`# ${r.command}\n# lancée le ${new Date(r.started).toLocaleString('fr-FR')} dans ${ROOT}\n\n`)
+    return log
+  } catch {
+    r.log = null
+    return null
+  }
 }
 
 function stopRun(r) {

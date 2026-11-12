@@ -168,6 +168,10 @@
   #plan li.completed { color: var(--muted); text-decoration: line-through; }
   #plan li.in_progress { color: var(--accent); font-weight: 600; }
   #queue { padding: 2px 10px 0; }
+  #pendingBar { display: flex; gap: 8px; align-items: center; padding: 4px 10px 0; font-size: 12px; }
+  #pendingBar .t { flex: 1; color: var(--muted); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #pendingBar .t:hover { color: var(--fg); }
+  #pendingBar button { padding: 2px 10px; font-size: 12px; }
   .qi { display: flex; gap: 6px; align-items: center; font-size: 12px; padding: 1px 0; }
   .qi .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
   .qi button { padding: 0 6px; font-size: 11px; }
@@ -331,6 +335,7 @@
     <div id="dock">
       <div id="dockSplit" title="Glisser pour agrandir"></div>
       <details id="plan" hidden><summary id="planSum"></summary><ol id="planList"></ol></details>
+      <div id="pendingBar" hidden></div>
       <div id="queue"></div>
       <div id="promptRow"><div id="promptEd"></div>
         <div id="promptSide"><div id="busyNote" hidden></div><button id="promptSend" class="primary" title="Envoyer à Claude (Ctrl+Entrée)">Envoyer</button></div></div>
@@ -975,8 +980,8 @@ function renderReview() {
   if (!items.length) {
     box.append(h('div', { class: 'hint' }, 'Rien en attente. Clique sur le + d\'une ligne pour commenter, Ctrl+L pour joindre du code, ou ❌ Rejeter sur un bloc. Tout part avec ton prochain prompt.'))
   } else {
-    box.append(h('div', { class: 'pad' }, h('button', { class: 'primary', style: 'width:100%', onclick: () => event({ type: 'sendReview' }) }, `📨 Envoyer maintenant (${items.length})`)))
-    box.append(h('div', { class: 'hint' }, 'Sinon, joint automatiquement à ton prochain prompt.'))
+    box.append(h('div', { class: 'pad' }, h('button', { class: 'primary', style: 'width:100%', title: 'Envoie ces éléments à Claude tout de suite, sans écrire de prompt', onclick: submitReview }, `📨 Soumettre la revue (${items.length})`)))
+    box.append(h('div', { class: 'hint' }, srv.busy ? 'Claude travaille : la revue partira dès qu\'il aura fini. Sinon, elle part avec ton prochain prompt.' : 'Sinon, elle part avec ton prochain prompt.'))
   }
   for (const it of items) {
     const icon = it.kind === 'reject' ? '❌' : it.kind === 'restore' ? '↶' : it.kind === 'snippet' ? '📎' : it.kind === 'tests' ? '▶' : it.kind === 'idea' ? '💡' : '💬'
@@ -1117,14 +1122,13 @@ function appendRunOut(text) {
 function attachRun() {
   const r = runs.get(view.id)
   if (!r) return
+  const state = r.running ? 'toujours en cours' : r.stopped ? 'arrêtée par l\'utilisateur' : r.code === 0 ? 'terminée sans erreur' : `terminée en échec (code ${r.code})`
+  const what = `Sortie de la commande « ${r.name} » (\`${r.command}\`), ${state}`
+  // le journal complet est sur le disque : Claude en lit la fin ou y cherche l'erreur lui-même
+  if (r.log) return event({ type: 'tests', text: `${what}, ${r.lines} ligne${r.lines > 1 ? 's' : ''}. Journal complet : ${r.log} (lis-en la fin ou cherche l'erreur si besoin).` })
   const lines = runOut.replace(/\s+$/, '').split('\n')
   const TAIL = 150
-  const state = r.running ? 'toujours en cours' : r.stopped ? 'arrêtée par l\'utilisateur' : r.code === 0 ? 'terminée sans erreur' : `terminée en échec (code ${r.code})`
-  event({
-    type: 'tests',
-    text: `Sortie de la commande « ${r.name} » (\`${r.command}\`), ${state}.${lines.length > TAIL ? ` Voici les ${TAIL} dernières lignes :` : ''}`,
-    code: lines.slice(-TAIL).join('\n'),
-  })
+  event({ type: 'tests', text: `${what}.${lines.length > TAIL ? ` Voici les ${TAIL} dernières lignes :` : ''}`, code: lines.slice(-TAIL).join('\n') })
 }
 
 // ---------- boîte à idées ----------
@@ -1359,7 +1363,20 @@ function historyStep(dir) {
   promptEd.setPosition(dir > 0 ? { lineNumber: 1, column: 1 } : { lineNumber: m.getLineCount(), column: m.getLineMaxColumn(m.getLineCount()) })
   return true
 }
+/** La revue en attente part tout de suite, sans prompt à écrire (en file si Claude travaille). */
+function submitReview() {
+  if ((srv.review || []).length) event({ type: 'sendReview' })
+}
+
 function renderDock() {
+  // la revue en attente, à soumettre d'un clic
+  const rv = srv.review || []
+  $('pendingBar').hidden = !rv.length
+  if (rv.length)
+    $('pendingBar').replaceChildren(
+      h('span', { class: 't', title: 'Voir la liste', onclick: () => showPanel('review') }, `💬 ${rv.length} élément${rv.length > 1 ? 's' : ''} de revue en attente`),
+      h('button', { class: 'primary', title: 'Envoie la revue à Claude tout de suite, sans écrire de prompt', onclick: submitReview }, srv.busy ? '📨 Soumettre (en file)' : '📨 Soumettre la revue'),
+    )
   // le plan de Claude
   const plan = srv.plan || []
   $('plan').hidden = !plan.length
@@ -1647,6 +1664,8 @@ function connect() {
     if (ev.type === 'toast') return toast(ev.text)
     if (ev.type === 'run') {
       if (ev.phase === 'out') {
+        const r = runs.get(ev.id)
+        if (r) r.lines = (r.lines || 0) + (ev.text.match(/\n/g) || []).length
         if (view.kind === 'run' && view.id === ev.id) appendRunOut(ev.text)
         return
       }

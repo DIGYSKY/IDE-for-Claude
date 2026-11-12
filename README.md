@@ -50,7 +50,8 @@ On peut passer de l'une à l'autre : la touche `w` du panneau ouvre la page web 
 - Un fichier dont tous les blocs sont acceptés sort de la revue de ce prompt : il repasse en édition normale et son onglet se ferme comme les autres. Une nouvelle modif de Claude le remet en revue
 - ✅ Tout valider, dans l'en-tête et en haut de l'historique : tous les fichiers encore en revue en sortent, tous prompts confondus
 - 🕓 Historique prompt par prompt : le prompt en cours est mis en évidence, avec ✅ Tout accepter et ❌ Tout refuser (ses fichiers reviennent à leur état d'avant, Claude est prévenu) ; un ancien prompt pas encore validé est marqué « n à valider » ; diff de toute la session, ↶ revenir avant un prompt plus ancien. Chaque fichier indique le sous-agent (🤖) et l'outil (⚙️ Bash, 📓 notebook) quand ce n'est pas Claude avec `Edit`/`Write`
-- Commentaires, rejets, idées et extraits partent avec le prochain prompt, ou avec « Envoyer maintenant »
+- Commentaires, rejets, idées et extraits partent avec le prochain prompt, ou tout de suite avec **📨 Soumettre la revue** : dans l'onglet 💬 ou au-dessus de l'éditeur de prompt, sans rien avoir à écrire (si Claude travaille, la revue attend son tour)
+- La revue envoie les emplacements (fichier et lignes) et ton texte, pas le code : il est sur le disque, Claude le lit s'il en a besoin
 - Badges git et comparaison avec `git HEAD`
 
 ### Parler à Claude depuis la page
@@ -81,7 +82,7 @@ La mod donne à Claude des outils à lui :
 
 - 💡 **Boîte à idées** (par projet) : ajouter, étiqueter, filtrer (nouvelles, en cours, faites), modifier d'un double-clic, ✍ mentionner dans le prompt, 📎 joindre au prochain prompt. Clic droit sur du code → 💡 (ou `Ctrl+Alt+I`) pour partir d'une sélection
 - 📍 **Annotations de Claude** : une liste par fichier ; un clic ouvre le fichier sur la ligne, surlignée avec un 📍 dans la marge
-- ▶ **Commandes** : taper une commande et la lancer, en enregistrer (par projet), relancer, arrêter. Plusieurs peuvent tourner en même temps, un serveur de dev par exemple. 🖥 ouvre le terminal d'une commande : sa sortie en direct, ■ Arrêter, ↻ Relancer, 📎 joindre la fin de la sortie pour Claude. Les scripts de `package.json`, les tests détectés et les cibles du `Makefile` sont proposés
+- ▶ **Commandes** : taper une commande et la lancer, en enregistrer (par projet), relancer, arrêter. Plusieurs peuvent tourner en même temps, un serveur de dev par exemple. 🖥 ouvre le terminal d'une commande : sa sortie en direct, ■ Arrêter, ↻ Relancer, 📎 joindre la sortie pour Claude : il reçoit le chemin du journal complet de la commande et en lit ce qu'il lui faut. Les scripts de `package.json`, les tests détectés et les cibles du `Makefile` sont proposés
 
 ### ⚙️ Paramètres
 
@@ -102,7 +103,7 @@ Sinon, ou si tu choisis « template » dans ⚙️, un modèle maison : variable
 | `Ctrl+P` | Ouvrir un fichier |
 | `Ctrl+Shift+F` | Chercher dans le projet |
 | `Ctrl+S` | Sauver |
-| `Ctrl+L` | Joindre la sélection au prompt |
+| `Ctrl+L` | Mentionner la sélection (fichier et lignes) dans le prompt |
 | `Ctrl+Alt+I` | Nouvelle idée depuis la sélection |
 | `Ctrl+Entrée` | Envoyer le prompt, valider un commentaire |
 | `↑` / `↓` dans le prompt | Prompts précédents |
@@ -114,6 +115,7 @@ Sur macOS, `Cmd` marche à la place de `Ctrl`. Chrome peut garder `Cmd+L` pour s
 | Quoi | Portée | Où |
 |---|---|---|
 | Historique des prompts, revue en cours, file d'attente, plan | par session : retrouvés en reprenant la conversation (`claude --resume`, la liste de `/resume`, `claude -c`) | `~/.claude/plugins/data/ide-for-claude/sessions/<session>.json`, effacé après 30 jours (réglable) |
+| Sorties des commandes lancées depuis la page | un journal par lancement | `~/.claude/plugins/data/ide-for-claude/runs/`, effacé après la même durée que l'historique |
 | Idées, annotations, commandes enregistrées, prompts envoyés depuis la page | par projet | `~/.claude/plugins/data/ide-for-claude/projects/<dossier>-<empreinte>.json` |
 | Page web : onglets ouverts, fichier affiché, position dans chaque fichier, colonnes, replis, panneau latéral, brouillon du prompt, notifications | par projet | stockage de la mod (`$.store`) |
 | Réglages de l'éditeur et d'IDE for Claude, panneau terminal | pour tous les projets | stockage de la mod (`$.store`) |

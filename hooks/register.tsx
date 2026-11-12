@@ -439,19 +439,19 @@ async function reviewBlock($: $): Promise<string | null> {
   const items = await read($, reviewAtom)
   if (!items.length) return null
   const cwd = await $.session.cwd()
+  // seulement des emplacements et le texte de l'utilisateur : le code est sur le disque, Claude le lit s'il en a besoin
   const lines = items.map((it, i) => {
-    const where = it.path ? `${relTo(cwd, it.path)}${it.line ? ` ligne${it.endLine && it.endLine !== it.line ? `s ${it.line}-${it.endLine}` : ` ${it.line}`}` : ''}` : ''
+    const where = it.path ? `${relTo(cwd, it.path)}${it.line ? `, ligne${it.endLine && it.endLine !== it.line ? `s ${it.line}-${it.endLine}` : ` ${it.line}`}` : ''}` : ''
     if (it.kind === 'reject')
-      return `${i + 1}. ${where} : BLOC REJETÉ. L'utilisateur a remis le code d'avant.${it.code ? `\n   Ton code rejeté :\n${fence(it.code)}` : ''}${it.text ? `\n   Commentaire : ${it.text}` : ''}`
-    if (it.kind === 'restore') return `${i + 1}. ${it.text}`
-    if (it.kind === 'idea') return `${i + 1}. ${it.text}`
+      return `${i + 1}. ${where} : bloc rejeté, l'utilisateur a remis le code d'avant.${it.text ? `\n   Commentaire : ${it.text}` : ''}`
+    if (it.kind === 'restore' || it.kind === 'idea') return `${i + 1}. ${it.text}`
+    // une sortie de commande : le chemin de son journal ; la fin de la sortie seulement si le journal manque
     if (it.kind === 'tests') return `${i + 1}. ${it.text}${it.code ? `\n${fence(it.code)}` : ''}`
-    if (it.kind === 'snippet')
-      return `${i + 1}. ${where} : extrait de code partagé par l'utilisateur :\n${fence(it.code ?? '')}${it.text ? `\n   Note : ${it.text}` : ''}`
-    return `${i + 1}. ${where}${it.code ? `, sur :\n${fence(it.code)}` : ''}\n   Commentaire : ${it.text}`
+    if (it.kind === 'snippet') return `${i + 1}. ${where} : extrait signalé par l'utilisateur.${it.text ? `\n   Note : ${it.text}` : ''}`
+    return `${i + 1}. ${where}\n   Commentaire : ${it.text}`
   })
   return [
-    'Éléments joints par l’utilisateur depuis IDE for Claude (review de tes modifications et extraits de code). Prends en compte chaque point :',
+    'Revue de l’utilisateur depuis IDE for Claude (tes modifications et des endroits du code ; lis les fichiers si besoin). Prends en compte chaque point :',
     '',
     ...lines,
   ].join('\n')
@@ -579,6 +579,12 @@ async function pruneSessions($: $) {
   for (const x of await $.fs.list(dir).catch(() => [])) {
     if (x.kind === 'file' && x.name.endsWith('.json') && x.mtimeMs < old)
       await $.process.run(['rm', '-f', '--', `${dir}/${x.name}`]).catch(() => undefined)
+  }
+  // les journaux de l'exécuteur de commandes suivent la même durée
+  const runs = `${await baseDir($)}/runs`
+  for (const x of await $.fs.list(runs).catch(() => [])) {
+    if (x.kind === 'file' && x.name.endsWith('.log') && x.mtimeMs < old)
+      await $.process.run(['rm', '-f', '--', `${runs}/${x.name}`]).catch(() => undefined)
   }
 }
 
@@ -1122,7 +1128,7 @@ async function onWebEvent($: $, ev: WebEvent) {
     case 'sendReview': {
       if (!(await read($, reviewAtom)).length) break
       // comme un prompt de la page : la revue en attente y est jointe ; en file si Claude travaille
-      const text = 'Voici ma review de tes modifications.'
+      const text = 'Voici ma revue de tes modifications.'
       if (await read($, busyAtom)) {
         await update($, queueAtom, q => [...q, { id: newId(), text, at: Date.now() }])
         await notify($, { type: 'toast', text: '⏳ Review en file d’attente : elle partira quand Claude aura fini' })
@@ -1294,6 +1300,9 @@ function startWeb($: $): Promise<string> {
     const prev = await read($, webAtom)
     const token = prev?.token ?? randomToken()
     const argv = ['node', `${$.plugin.root}/server/server.mjs`, '--root', cwd, '--token', token]
+    // les journaux de l'exécuteur de commandes, à côté des données de la mod (sinon le dossier temporaire)
+    const data = await baseDir($).catch(() => null)
+    if (data) argv.push('--logs', `${data}/runs`)
     if (prev) {
       // un ancien serveur de la session peut encore tourner, lancé par une copie précédente
       // de la mod : plus personne ne lit ce que la page lui envoie. On l'arrête et on reprend son port.

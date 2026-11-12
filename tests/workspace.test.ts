@@ -131,3 +131,45 @@ test('un prompt envoyé pendant que Claude travaille attend son tour, puis part 
   expect((w.state.history as { prompt: string }[]).map(t => t.prompt)).toContain('explique @a.ts:2-3 avec /review')
   expect(w.state.queue).toEqual([])
 })
+
+test('« Soumettre la revue » envoie les points en attente sans prompt à écrire, avec leurs emplacements seulement', async ($, on) => {
+  const w = workspace(on, { '/p/a.ts': 'l1\nl2\nl3\n' })
+  on('http.fetch', () => ({ value: { status: 200, ok: true, headers: {}, text: '{}' } }))
+  const sent: string[] = []
+  let arrived = () => {}
+  const isSent = new Promise<void>(r => (arrived = r))
+  on('prompt.submit', (_$, e) => {
+    sent.push(e.text)
+    arrived()
+    return { text: e.text }
+  })
+  // une page est déjà ouverte : cette valeur tient jusqu'à ce que la mod réécrive `web`
+  on('state.get', ($, e, next) =>
+    (e as unknown as { key: string }).key === 'web' && !('web' in w.state)
+      ? { value: { value: { shape: 'web-1', value: { port: 61077, token: 'cle' } }, version: 1 } }
+      : next(e),
+  )
+  let stop = () => {}
+  const alive = new Promise<void>(r => (stop = r))
+  const say = (event: object) => ({ stream: 'stdout' as const, text: JSON.stringify({ event }) + '\n' })
+  on('process.spawn', async function* () {
+    yield { stream: 'stdout' as const, text: '{"port":61077}\n' }
+    yield say({ type: 'comment', path: '/p/a.ts', line: 2, endLine: 3, code: 'l2\nl3', text: 'renomme ça', id: 'c1' })
+    yield say({ type: 'rejected', path: '/p/a.ts', line: 1, endLine: 1, code: 'code-rejeté' })
+    yield say({ type: 'tests', text: 'Sortie de la commande « tests ». Journal complet : /logs/1-tests.log' })
+    yield say({ type: 'sendReview' })
+    await alive
+    return { value: { code: 0, signal: null } }
+  })
+
+  await $.tool.call({ tool: `${T}command_save`, name: 'x', command: 'true' } as never)
+  await isSent
+  stop()
+  const text = sent[0]!
+  expect(text).toContain('a.ts, lignes 2-3\n   Commentaire : renomme ça')
+  expect(text).toContain('a.ts, ligne 1 : bloc rejeté')
+  expect(text).toContain('Journal complet : /logs/1-tests.log')
+  // le code reste sur le disque : il ne part pas avec la revue
+  expect(text).not.toContain('l2\nl3')
+  expect(text).not.toContain('code-rejeté')
+})
