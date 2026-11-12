@@ -77,7 +77,7 @@ Le premier onglet de l'éditeur, fixe (il ne se ferme pas et reste à gauche mê
 
 ### ❓ Les questions de Claude
 
-Quand Claude te pose une question (ses QCM, l'outil AskUserQuestion) et que la page est ouverte, elle s'affiche au-dessus du prompt, avec un son et une notification si la page est en arrière-plan. Un clic sur une réponse suffit pour une question simple ; pour plusieurs questions ou des choix multiples, coche puis « Répondre ». « Autre réponse » permet d'écrire la tienne. « ↩ Répondre dans le terminal » renvoie la question à Claude Code. Si la page est fermée (ou l'est depuis 15 s), la question se pose dans le terminal comme d'habitude. Désactivable dans ⚙️.
+Quand Claude te pose une question (ses QCM, l'outil AskUserQuestion) et que la page est ouverte, elle s'affiche au-dessus du prompt, avec un son et une notification si la page est en arrière-plan. Un clic sur une réponse suffit pour une question simple ; pour plusieurs questions ou des choix multiples, coche puis « Répondre ». « Autre réponse » permet d'écrire la tienne, sa case se coche dès que tu écris. « ▾ Réduire » (`Alt+Q`, macOS `⌃Q`) la replie en une barre le temps d'aller lire un fichier ou la conversation, sans perdre ce que tu as coché ; un clic sur la barre la rouvre. « ↩ Répondre dans le terminal » renvoie la question à Claude Code. Si la page est fermée (ou l'est depuis 15 s), la question se pose dans le terminal comme d'habitude. Désactivable dans ⚙️.
 
 ### 📊 Claude Status
 
@@ -149,6 +149,7 @@ Ci-dessous, `Mod` est `Cmd` sur macOS et `Ctrl` ailleurs. Les raccourcis à lett
 | `Alt+1` à `Alt+7` · macOS `⌃1` à `⌃7` | Fichiers, recherche, historique, revue, idées, annotations, commandes |
 | `Alt+0` · macOS `⌃0` | 💬 Conversation, et retour au fichier |
 | `Alt+9` · macOS `⌃9` | 📊 Claude Status |
+| `Alt+Q` · macOS `⌃Q` | Réduire / afficher la question de Claude |
 
 | Prompt et commandes | |
 |---|---|
