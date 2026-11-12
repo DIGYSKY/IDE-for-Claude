@@ -1,0 +1,1 @@
+{ "name": "ide-for-claude", "version": "0.1.0", "description": "IDE dans un panneau : explorateur, éditeur et diff des modifications de Claude à accepter ou rejeter", "types": "./types/index.d.ts" }

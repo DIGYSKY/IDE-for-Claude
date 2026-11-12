@@ -1,0 +1,1066 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IDE for Claude</title>
+<style>
+  :root {
+    --bg: #ffffff; --panel: #f6f7f9; --border: #e3e5e8; --text: #1f2328; --muted: #6b7280;
+    --accent: #d97757; --accent-soft: #fbe9e2; --hover: #eceef1; --sel: #e4e8ee; --ok: #1a7f37; --ok-soft: #dafbe1;
+    --bad: #cf222e; --bad-soft: #ffebe9; --warn: #9a6700; --shadow: 0 8px 30px rgba(0,0,0,.18);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1e1e; --panel: #181818; --border: #2b2b2b; --text: #d4d4d4; --muted: #8b8b8b;
+      --accent: #e08a6a; --accent-soft: #3a2a24; --hover: #2a2d2e; --sel: #37373d; --ok: #3fb950; --ok-soft: #12261a;
+      --bad: #f85149; --bad-soft: #2d1416; --warn: #d29922; --shadow: 0 8px 30px rgba(0,0,0,.5);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #app { display: grid; grid-template-columns: var(--side, 280px) 4px 1fr; grid-template-rows: 36px 1fr 26px; height: 100vh; }
+  header { grid-column: 1 / 4; display: flex; align-items: center; gap: 10px; padding: 0 12px;
+    background: var(--panel); border-bottom: 1px solid var(--border); }
+  header .name { font-weight: 600; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.on { background: var(--ok); }
+  .spacer { flex: 1; }
+  button { font: inherit; color: var(--text); background: transparent; border: 1px solid var(--border);
+    border-radius: 6px; padding: 3px 10px; cursor: pointer; white-space: nowrap; }
+  button:hover:not(:disabled) { background: var(--hover); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover:not(:disabled) { filter: brightness(1.05); background: var(--accent); }
+  button.ghost { border-color: transparent; }
+  button.on { background: var(--sel); }
+  button:disabled { opacity: .45; cursor: default; }
+  input[type=text], textarea { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 8px; width: 100%; outline: none; }
+  input[type=text]:focus, textarea:focus { border-color: var(--accent); }
+  aside { background: var(--panel); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  #split { background: var(--border); cursor: col-resize; }
+  #split:hover { background: var(--accent); }
+  #sideTabs { display: flex; border-bottom: 1px solid var(--border); flex: none; }
+  #sideTabs button { flex: 1; border: 0; border-radius: 0; padding: 7px 0; color: var(--muted); position: relative; }
+  #sideTabs button.cur { color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
+  #sideTabs .n { font-size: 10px; background: var(--accent); color: #fff; border-radius: 8px; padding: 0 5px; margin-left: 3px; }
+  .panel { flex: 1; overflow: auto; padding: 6px 0; display: none; }
+  .panel.cur { display: block; }
+  .panel h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 8px 12px 4px; font-weight: 600; }
+  .panel .pad { padding: 4px 10px; }
+  .hint { color: var(--muted); font-size: 12px; padding: 6px 12px; }
+  .row { display: flex; align-items: center; gap: 4px; padding: 2px 8px; cursor: pointer; white-space: nowrap;
+    overflow: hidden; color: var(--muted); user-select: none; }
+  .row > span.label { overflow: hidden; text-overflow: ellipsis; }
+  .row:hover { background: var(--hover); }
+  .row.cur { background: var(--sel); color: var(--text); }
+  .row.changed, .row.hasChanged { color: var(--accent); font-weight: 500; }
+  .row .tw { width: 12px; flex: none; text-align: center; font-size: 10px; }
+  .git { margin-left: auto; font-size: 11px; font-weight: 600; padding-left: 6px; flex: none; }
+  .git.M { color: var(--warn); } .git.A, .git.U { color: var(--ok); } .git.D { color: var(--bad); } .git.R { color: var(--accent); }
+  .git.dot::after { content: '•'; }
+  main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  #tabs { display: flex; overflow-x: auto; background: var(--panel); border-bottom: 1px solid var(--border); flex: none; min-height: 33px; }
+  .tab { display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-right: 1px solid var(--border);
+    cursor: pointer; white-space: nowrap; color: var(--muted); }
+  .tab.cur { background: var(--bg); color: var(--text); box-shadow: inset 0 2px 0 var(--accent); }
+  .tab .x { opacity: .5; padding: 0 3px; border-radius: 3px; }
+  .tab .x:hover { opacity: 1; background: var(--hover); }
+  .tab .mark { color: var(--accent); }
+  .tab.ok .mark { color: var(--ok); }
+  #bar { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-bottom: 1px solid var(--border); flex: none; flex-wrap: wrap; }
+  #bar .path { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 60px; }
+  #bar .mode { color: var(--accent); font-weight: 600; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; }
+  .seg button.on { background: var(--accent-soft); color: var(--accent); }
+  #banner { display: none; padding: 6px 12px; background: var(--accent-soft); gap: 8px; align-items: center; flex: none; }
+  #banner.show { display: flex; }
+  #editors { position: relative; flex: 1; min-height: 0; }
+  #editors > div { position: absolute; inset: 0; }
+  #empty { display: flex; align-items: center; justify-content: center; color: var(--muted); text-align: center; padding: 24px; line-height: 1.8; }
+  kbd { font: 11px ui-monospace, monospace; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--panel); }
+  footer { grid-column: 1 / 4; display: flex; align-items: center; gap: 14px; padding: 0 12px; font-size: 12px;
+    color: var(--muted); background: var(--panel); border-top: 1px solid var(--border); white-space: nowrap; overflow: hidden; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  #activity { color: var(--accent); overflow: hidden; text-overflow: ellipsis; }
+  #activity.idle { color: var(--muted); }
+  .spin { display: inline-block; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* zones dans l'éditeur : barre de bloc, commentaires */
+  .zone { font: 12px system-ui, sans-serif; display: flex; align-items: center; gap: 6px; padding: 2px 8px; height: 100%; }
+  .zone.hunk { color: var(--muted); }
+  .zone.hunk.ok { color: var(--ok); }
+  .zone button { padding: 0 8px; font-size: 12px; line-height: 20px; background: var(--bg); }
+  .zone button.okb { border-color: var(--ok); color: var(--ok); }
+  .zone button.badb { border-color: var(--bad); color: var(--bad); }
+  .zone.ok button.okb { background: var(--ok-soft); }
+  .cbox { margin: 4px 8px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 6px;
+    background: var(--panel); padding: 6px 8px; font: 13px system-ui, sans-serif; color: var(--text); display: flex; flex-direction: column; gap: 6px; }
+  .cbox .who { font-size: 11px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .cbox .who .x { margin-left: auto; cursor: pointer; }
+  .cbox textarea { resize: none; height: 54px; }
+  .cbox .acts { display: flex; gap: 6px; justify-content: flex-end; }
+  .cbox.reject { border-left-color: var(--bad); }
+  .miw { position: absolute; z-index: 5; box-sizing: border-box; overflow: hidden; }
+  .miw.cbox { margin: 0; height: auto; }
+  .miw .ctext { white-space: pre-wrap; word-break: break-word; }
+  .zone.miw { background: var(--panel); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .mi-plus { cursor: pointer; }
+  .mi-plus::before { content: '+'; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin: 1px 0 0 2px;
+    border-radius: 4px; background: var(--accent); color: #fff; font: bold 13px/1 system-ui, sans-serif; }
+
+  /* panneaux latéraux */
+  .item { margin: 4px 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); cursor: pointer; }
+  .item:hover { border-color: var(--accent); }
+  .item .top { display: flex; gap: 6px; align-items: center; font-size: 11px; color: var(--muted); }
+  .item .top .x { margin-left: auto; padding: 0 4px; border-radius: 3px; }
+  .item .top .x:hover { background: var(--hover); color: var(--text); }
+  .item .txt { margin-top: 3px; white-space: pre-wrap; word-break: break-word; }
+  .item code { font: 11px ui-monospace, monospace; color: var(--muted); display: block; white-space: pre; overflow: hidden; text-overflow: ellipsis; margin-top: 3px; }
+  .turn { margin: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); overflow: hidden; }
+  .turn .head { padding: 6px 8px; display: flex; gap: 6px; align-items: baseline; }
+  .turn .head b { color: var(--accent); }
+  .turn .head .t { color: var(--muted); font-size: 11px; margin-left: auto; }
+  .turn .prompt { padding: 0 8px 6px; color: var(--muted); font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .turn .f { display: flex; gap: 6px; padding: 3px 8px 3px 14px; cursor: pointer; border-top: 1px solid var(--border); }
+  .turn .f:hover { background: var(--hover); }
+  .turn .f.cur { background: var(--sel); }
+  .turn .f .s { margin-left: auto; font: 11px ui-monospace, monospace; }
+  .add { color: var(--ok); } .del { color: var(--bad); }
+  .turn .acts { padding: 5px 8px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; }
+  .res { padding: 2px 10px 2px 22px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: 12px ui-monospace, monospace; color: var(--muted); }
+  .res:hover { background: var(--hover); color: var(--text); }
+  .res mark { background: var(--accent-soft); color: var(--accent); }
+  .resf { padding: 4px 10px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* fenêtres */
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.25); display: none; align-items: flex-start; justify-content: center; padding-top: 12vh; z-index: 50; }
+  .modal.show { display: flex; }
+  .card { width: min(620px, 92vw); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; }
+  .card .body { padding: 14px; }
+  .card .acts { display: flex; gap: 8px; justify-content: flex-end; padding: 10px 14px; border-top: 1px solid var(--border); background: var(--panel); }
+  #qoList { max-height: 50vh; overflow: auto; }
+  .qo { padding: 5px 14px; cursor: pointer; display: flex; gap: 8px; align-items: baseline; }
+  .qo .d { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .qo.cur { background: var(--sel); }
+  #toasts { position: fixed; right: 16px; bottom: 40px; display: flex; flex-direction: column; gap: 8px; z-index: 60; }
+  .toast { background: var(--text); color: var(--bg); padding: 8px 12px; border-radius: 8px; box-shadow: var(--shadow); animation: fade .2s; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } }
+  @media (max-width: 760px) { #app { --side: 0px !important; } aside, #split { display: none; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <span class="dot" id="dot" title="Connexion"></span>
+    <span class="name" id="name">IDE for Claude</span>
+    <span class="spacer"></span>
+    <button class="ghost" id="qoBtn" title="Ouvrir un fichier">🔎 Ouvrir <kbd>Ctrl+P</kbd></button>
+    <button class="ghost" id="notifBtn" title="Notification quand Claude a fini">🔕</button>
+  </header>
+  <aside>
+    <div id="sideTabs">
+      <button data-p="files" title="Fichiers">📁</button>
+      <button data-p="search" title="Rechercher (Ctrl+Shift+F)">🔎</button>
+      <button data-p="history" title="Historique des prompts">🕓<span class="n" id="nHist" hidden></span></button>
+      <button data-p="review" title="Review pour Claude">💬<span class="n" id="nRev" hidden></span></button>
+    </div>
+    <div class="panel" id="p-files"><div id="tree"></div></div>
+    <div class="panel" id="p-search">
+      <div class="pad" style="display:flex;gap:6px"><input type="text" id="q" placeholder="Rechercher dans le projet"><button id="qCase" title="Respecter la casse">Aa</button></div>
+      <div id="results"></div>
+    </div>
+    <div class="panel" id="p-history"><div id="history"></div></div>
+    <div class="panel" id="p-review"><div id="review"></div></div>
+  </aside>
+  <div id="split"></div>
+  <main>
+    <div id="tabs"></div>
+    <div id="bar">
+      <span class="mode" id="mode"></span>
+      <span class="path" id="path"></span>
+      <span class="spacer"></span>
+      <span class="seg" id="cmpSeg" title="Base du diff"><button data-c="claude">Claude</button><button data-c="git">git HEAD</button></span>
+      <button id="fileOk" title="Valider visuellement tout le fichier">✅ Fichier</button>
+      <button id="fileNo" title="Remettre tout le fichier dans son état d'avant">❌ Fichier</button>
+      <button id="toggleSide" title="Une colonne ou deux">⇆</button>
+      <button id="toggleFold" title="Replier les lignes inchangées">Replier</button>
+      <button id="back" hidden>← Retour au fichier</button>
+      <button id="reload" title="Recharger">↻</button>
+      <button id="save" class="primary" disabled>Sauver</button>
+    </div>
+    <div id="banner"><span id="bannerText"></span><span class="spacer"></span>
+      <button id="bannerReload">Recharger</button><button id="bannerForce">Écraser</button></div>
+    <div id="editors">
+      <div id="empty">Choisis un fichier à gauche ou avec <kbd>Ctrl+P</kbd>.<br>
+        Les fichiers modifiés par Claude s'ouvrent ici avec leur diff.<br>
+        <kbd>Ctrl+L</kbd> joint la sélection pour Claude, le <b>+</b> d'une ligne la commente.</div>
+      <div id="ed" hidden></div>
+      <div id="diff" hidden></div>
+    </div>
+  </main>
+  <footer>
+    <span id="activity" class="idle">Claude est en attente</span>
+    <span class="spacer"></span>
+    <span class="legend"><i style="background:rgba(46,160,67,.35)"></i>ajouté</span>
+    <span class="legend"><i style="background:rgba(248,81,73,.35)"></i>retiré</span>
+    <span id="status"></span>
+  </footer>
+</div>
+
+<div class="modal" id="qo"><div class="card"><div class="body"><input type="text" id="qoIn" placeholder="Nom de fichier…"></div><div id="qoList"></div></div></div>
+<div class="modal" id="cf"><div class="card"><div class="body" id="cfText"></div>
+  <div class="acts"><button id="cfNo">Annuler</button><button id="cfYes" class="primary">Confirmer</button></div></div></div>
+<div id="toasts"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+<script>
+const CDN = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min'
+const T = new URLSearchParams(location.search).get('t') || ''
+const $ = (id) => document.getElementById(id)
+const h = (tag, props = {}, ...kids) => {
+  const el = document.createElement(tag)
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'class') el.className = v
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v)
+    else if (v !== undefined && v !== null && v !== false) el.setAttribute(k, v)
+  }
+  for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) el.append(k)
+  return el
+}
+const api = (p, init = {}) =>
+  fetch(p, { ...init, headers: { 'x-token': T, 'content-type': 'application/json', ...(init.headers || {}) } })
+const event = (payload) => api('/api/event', { method: 'POST', body: JSON.stringify(payload) })
+
+const LANG = {
+  js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript',
+  mts: 'typescript', cts: 'typescript', json: 'json', jsonc: 'json', md: 'markdown', markdown: 'markdown',
+  py: 'python', sh: 'shell', bash: 'shell', zsh: 'shell', css: 'css', scss: 'scss', less: 'less', html: 'html',
+  htm: 'html', xml: 'xml', svg: 'xml', vue: 'html', yml: 'yaml', yaml: 'yaml', toml: 'ini', ini: 'ini', sql: 'sql',
+  go: 'go', rs: 'rust', java: 'java', kt: 'kotlin', c: 'c', h: 'c', cpp: 'cpp', hpp: 'cpp', cs: 'csharp',
+  php: 'php', rb: 'ruby', swift: 'swift', graphql: 'graphql',
+}
+const langOf = (p) => {
+  const n = p.split(/[\\/]/).pop().toLowerCase()
+  if (n === 'dockerfile') return 'dockerfile'
+  return LANG[n.includes('.') ? n.split('.').pop() : ''] || 'plaintext'
+}
+
+// ---------- état ----------
+let srv = { root: '', name: '', sep: '/', changes: [], history: [], review: [], accepted: [], prefs: null }
+let git = { repo: false, status: {} }
+const files = new Map()   // chemin -> { base, before, model, original }
+let tabs = []
+let cur = null
+let view = { kind: 'file' } // ou { kind: 'turn', id } / { kind: 'session' }
+let P = { sideBySide: false, fold: true, side: 280, panel: 'files', notify: false, compare: 'claude', expanded: [], collapsed: [], views: {} }
+let prefsLoaded = false
+let monaco, editor, diff
+
+const rel = (p) => (p.startsWith(srv.root + srv.sep) ? p.slice(srv.root.length + 1) : p)
+const base = (p) => p.split(/[\\/]/).pop()
+const isChanged = (p) => srv.changes.some((c) => c.path === p)
+const status = (t) => ($('status').textContent = t)
+const hash = (s) => { let x = 5381; for (let i = 0; i < s.length; i++) x = ((x << 5) + x + s.charCodeAt(i)) | 0; return (x >>> 0).toString(36) }
+const fmtTime = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+function toast(text) {
+  const t = h('div', { class: 'toast' }, text)
+  $('toasts').append(t)
+  setTimeout(() => t.remove(), 3500)
+}
+
+function confirmBox(html, yes = 'Confirmer') {
+  return new Promise((ok) => {
+    $('cfText').innerHTML = html
+    $('cfYes').textContent = yes
+    $('cf').classList.add('show')
+    const done = (v) => { $('cf').classList.remove('show'); $('cfYes').onclick = $('cfNo').onclick = null; ok(v) }
+    $('cfYes').onclick = () => done(true)
+    $('cfNo').onclick = () => done(false)
+  })
+}
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+
+// ---------- préférences (sauvegardées par projet dans la mod) ----------
+let prefsTimer
+function savePrefs() {
+  if (!prefsLoaded) return
+  clearTimeout(prefsTimer)
+  prefsTimer = setTimeout(() => {
+    rememberView()
+    event({ type: 'prefs', prefs: { ...P, tabs, cur } })
+  }, 700)
+}
+function rememberView() {
+  if (!cur || view.kind !== 'file') return
+  const ed = !$('diff').hidden ? diff.getModifiedEditor() : editor
+  const pos = ed.getPosition()
+  P.views[cur] = { line: pos ? pos.lineNumber : 1, col: pos ? pos.column : 1, top: ed.getScrollTop() }
+  const keys = Object.keys(P.views)
+  if (keys.length > 60) delete P.views[keys[0]]
+}
+function applyLayoutPrefs() {
+  document.getElementById('app').style.setProperty('--side', P.side + 'px')
+  showPanel(P.panel, false)
+  $('notifBtn').textContent = P.notify ? '🔔' : '🔕'
+  for (const b of $('cmpSeg').children) b.classList.toggle('on', b.dataset.c === P.compare)
+  applyDiffOptions()
+}
+
+// ---------- panneaux latéraux ----------
+function showPanel(name, save = true) {
+  P.panel = name
+  for (const b of $('sideTabs').children) b.classList.toggle('cur', b.dataset.p === name)
+  for (const p of document.querySelectorAll('.panel')) p.classList.toggle('cur', p.id === 'p-' + name)
+  if (save) savePrefs()
+}
+
+// ---------- arbre ----------
+async function loadDir(dir) {
+  const r = await api(`/api/tree?dir=${encodeURIComponent(dir)}`)
+  return r.ok ? (await r.json()).entries : []
+}
+async function refreshGit() {
+  const r = await api('/api/git')
+  if (r.ok) git = await r.json()
+}
+let treeSeq = 0
+async function renderTree() {
+  const seq = ++treeSeq
+  const box = h('div')
+  const gitPaths = Object.keys(git.status)
+  const walk = async (dir, depth) => {
+    for (const e of await loadDir(dir)) {
+      const isDir = e.kind === 'dir'
+      const open = isDir && (P.expanded.includes(e.path) || (e.hasChanged && !P.collapsed.includes(e.path)))
+      const g = isDir ? (gitPaths.some((p) => p.startsWith(e.path + srv.sep)) ? 'dot' : '') : git.status[e.path] || ''
+      const row = h('div', {
+        class: 'row' + (e.changed ? ' changed' : '') + (e.hasChanged ? ' hasChanged' : '') + (e.path === cur ? ' cur' : ''),
+        style: `padding-left:${8 + depth * 14}px`,
+        title: rel(e.path),
+        onclick: () => {
+          if (!isDir) return openFile(e.path)
+          const drop = (list, x) => list.filter((y) => y !== x)
+          if (open) { P.expanded = drop(P.expanded, e.path); P.collapsed = [...drop(P.collapsed, e.path), e.path] }
+          else { P.expanded = [...drop(P.expanded, e.path), e.path]; P.collapsed = drop(P.collapsed, e.path) }
+          savePrefs()
+          renderTree()
+        },
+      },
+        h('span', { class: 'tw' }, isDir ? (open ? '▾' : '▸') : ''),
+        h('span', { class: 'label' }, (isDir ? '📁 ' : e.changed ? '✏️ ' : '📄 ') + e.name),
+        g ? h('span', { class: 'git ' + g, title: { M: 'modifié', A: 'ajouté', U: 'non suivi', D: 'supprimé', R: 'renommé', dot: 'contient des changements git' }[g] }, g === 'dot' ? '' : g) : null,
+      )
+      box.append(row)
+      if (open) await walk(e.path, depth + 1)
+    }
+  }
+  await walk(srv.root, 0)
+  if (seq === treeSeq) $('tree').replaceChildren(box)
+}
+
+// ---------- onglets ----------
+function hunkKeysOf(p) { return srv.accepted.filter((k) => k.startsWith(p + '|')) }
+function renderTabs() {
+  const list = [...new Set([...srv.changes.map((c) => c.path), ...tabs])]
+  const box = $('tabs')
+  box.replaceChildren()
+  for (const p of list) {
+    const f = files.get(p)
+    const dirty = f && f.model && f.model.getValue() !== f.base
+    const changed = isChanged(p)
+    const allOk = changed && f && f.hunks && f.hunks.length > 0 && f.hunks.every((k) => srv.accepted.includes(k))
+    box.append(h('div', {
+      class: 'tab' + (p === cur && view.kind === 'file' ? ' cur' : '') + (allOk ? ' ok' : ''),
+      title: rel(p),
+      onclick: () => openFile(p),
+    },
+      changed ? h('span', { class: 'mark' }, allOk ? '✅' : '✏️') : null,
+      h('span', {}, base(p) + (dirty ? ' ●' : '')),
+      !changed ? h('span', { class: 'x', onclick: (ev) => { ev.stopPropagation(); closeTab(p) } }, '×') : null,
+    ))
+  }
+}
+function closeTab(p) {
+  tabs = tabs.filter((x) => x !== p)
+  if (cur === p) { cur = null; show(null) }
+  renderTabs()
+  savePrefs()
+}
+
+// ---------- éditeurs ----------
+function show(kind) {
+  $('empty').hidden = kind !== null
+  $('ed').hidden = kind !== 'ed'
+  $('diff').hidden = kind !== 'diff'
+  const isFile = view.kind === 'file'
+  const f = cur && files.get(cur)
+  const claudeDiff = kind === 'diff' && isFile && P.compare === 'claude' && isChanged(cur)
+  $('toggleSide').disabled = kind !== 'diff'
+  $('toggleFold').disabled = kind !== 'diff'
+  $('fileOk').hidden = $('fileNo').hidden = !claudeDiff
+  $('reload').hidden = $('save').hidden = !isFile
+  $('back').hidden = isFile
+  $('cmpSeg').style.display = isFile && git.repo ? '' : 'none'
+  $('mode').textContent = view.kind === 'turn' ? `🕓 Prompt ${view.id} · lecture seule` : view.kind === 'session' ? '🕓 Toute la session · lecture seule' : (P.compare === 'git' && kind === 'diff' ? 'git HEAD' : '')
+  if (kind === 'ed') editor.layout()
+  if (kind === 'diff') diff.layout()
+  if (f) updateFileButtons()
+}
+
+async function fetchFile(p) {
+  const ref = P.compare === 'git' && git.repo ? '&ref=HEAD' : ''
+  const r = await api(`/api/file?path=${encodeURIComponent(p)}${ref}`)
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText)
+  return r.json()
+}
+
+function setReadOnly(ro) {
+  diff.updateOptions({ readOnly: ro, originalEditable: false })
+  diff.getModifiedEditor().updateOptions({ readOnly: ro })
+}
+
+async function openFile(p, { keepView = false, line = null } = {}) {
+  if (view.kind === 'file' && cur && cur !== p) rememberView()
+  let data
+  try { data = await fetchFile(p) } catch (e) { status('⚠️ ' + e.message); return }
+  view = { kind: 'file' }
+  setReadOnly(false)
+  let f = files.get(p)
+  const uri = monaco.Uri.file(p)
+  if (!f) {
+    f = { model: monaco.editor.getModel(uri) || monaco.editor.createModel(data.text, langOf(p), uri), hunks: [] }
+    f.model.onDidChangeContent(() => { updateDirty() })
+    files.set(p, f)
+  }
+  if (f.model.getValue() !== data.text) f.model.pushEditOperations([], [{ range: f.model.getFullModelRange(), text: data.text }], () => null)
+  f.base = data.text
+  f.before = data.before
+  if (data.before !== null) {
+    const ouri = monaco.Uri.parse('before:' + p)
+    if (!f.original) f.original = monaco.editor.getModel(ouri) || monaco.editor.createModel(data.before, langOf(p), ouri)
+    else if (f.original.getValue() !== data.before) f.original.setValue(data.before)
+  }
+  if (!isChanged(p) && !tabs.includes(p)) tabs.push(p)
+  const switching = cur !== p
+  cur = p
+  $('path').textContent = rel(p)
+  hideBanner()
+  const ed = data.before !== null ? diff.getModifiedEditor() : editor
+  const vs = keepView ? { top: ed.getScrollTop(), pos: ed.getPosition() } : null
+  if (data.before !== null) {
+    diff.setModel({ original: f.original, modified: f.model })
+    show('diff')
+  } else {
+    editor.setModel(f.model)
+    show('ed')
+  }
+  const target = data.before !== null ? diff.getModifiedEditor() : editor
+  if (vs) { if (vs.pos) target.setPosition(vs.pos); target.setScrollTop(vs.top) }
+  else if (line) { target.revealLineInCenter(line); target.setPosition({ lineNumber: line, column: 1 }); target.focus() }
+  else if (switching && P.views[p]) {
+    const v = P.views[p]
+    setTimeout(() => { target.setPosition({ lineNumber: v.line, column: v.col }); target.setScrollTop(v.top) }, 30)
+  }
+  updateDirty()
+  renderTabs()
+  renderTree()
+  renderZones()
+  history.replaceState(null, '', `?t=${encodeURIComponent(T)}#${encodeURIComponent(p)}`)
+  savePrefs()
+}
+
+// un prompt de l'historique, ou toute la session, en lecture seule
+async function openTurn(id, p) {
+  if (view.kind === 'file') rememberView()
+  const r = await api(`/api/turn?id=${id}&path=${encodeURIComponent(p)}`)
+  if (!r.ok) { status('⚠️ Diff introuvable'); return }
+  const d = await r.json()
+  const mk = (tag, text) => {
+    const uri = monaco.Uri.parse(`${tag}-${id}:${p}`)
+    const m = monaco.editor.getModel(uri) || monaco.editor.createModel(text, langOf(p), uri)
+    if (m.getValue() !== text) m.setValue(text)
+    return m
+  }
+  view = id === 'session' ? { kind: 'session', path: p } : { kind: 'turn', id, path: p }
+  cur = p
+  diff.setModel({ original: mk('hb', d.before), modified: mk('ha', d.after) })
+  setReadOnly(true)
+  $('path').textContent = rel(p)
+  show('diff')
+  renderTabs()
+  renderHistory()
+  clearZones()
+}
+
+function updateDirty() {
+  const f = cur && files.get(cur)
+  const dirty = !!(view.kind === 'file' && f && f.model.getValue() !== f.base)
+  $('save').disabled = !dirty
+  document.title = `${dirty ? '● ' : ''}${cur ? base(cur) + ' · ' : ''}${srv.name} · IDE for Claude`
+  renderTabs()
+}
+
+async function save(force = false) {
+  const f = view.kind === 'file' && cur && files.get(cur)
+  if (!f) return
+  const text = f.model.getValue()
+  const r = await api('/api/save', { method: 'POST', body: JSON.stringify({ path: cur, text, base: f.base, force }) })
+  if (r.status === 409) return showBanner('⚠️ Le fichier a changé sur le disque depuis que tu l\'as ouvert.')
+  if (!r.ok) return status('⚠️ Sauvegarde refusée')
+  f.base = text
+  status('💾 Sauvegardé ' + new Date().toLocaleTimeString())
+  updateDirty()
+}
+
+function showBanner(text) { $('bannerText').textContent = text; $('banner').classList.add('show') }
+function hideBanner() { $('banner').classList.remove('show') }
+
+function applyDiffOptions() {
+  if (!diff) return
+  diff.updateOptions({ renderSideBySide: P.sideBySide, hideUnchangedRegions: { enabled: P.fold, contextLineCount: 3, minimumLineCount: 3 } })
+  $('toggleSide').textContent = P.sideBySide ? '☰ Une colonne' : '⇆ Deux colonnes'
+  $('toggleFold').textContent = P.fold ? 'Tout voir' : 'Replier'
+}
+
+// ---------- review : barres de bloc et commentaires dans l'éditeur ----------
+// Chaque cadre = une zone vide dans l'éditeur (pour faire la place) + une couche
+// posée par-dessus (pour le contenu cliquable), comme les cadres de VS Code.
+let widgets = { ed: [], diff: [] }
+let wseq = 0
+const drafts = [] // commentaires en cours d'écriture : { path, line, endLine, text }
+
+function addWidget(ed, bucket, afterLine, height, node) {
+  const id = 'miw' + ++wseq
+  node.classList.add('miw')
+  const overlay = { getId: () => id, getDomNode: () => node, getPosition: () => null }
+  let zoneId
+  const spacer = document.createElement('div')
+  ed.changeViewZones((a) => {
+    zoneId = a.addZone({
+      afterLineNumber: afterLine,
+      heightInPx: height,
+      domNode: spacer,
+      onDomNodeTop: (top) => { node.style.top = top + 'px'; node.style.display = '' },
+      onComputedHeight: (hgt) => { node.style.height = hgt + 'px' },
+    })
+  })
+  ed.addOverlayWidget(overlay)
+  const layout = () => {
+    const li = ed.getLayoutInfo()
+    node.style.left = li.contentLeft + 'px'
+    node.style.width = Math.max(200, li.contentWidth - li.verticalScrollbarWidth - 4) + 'px'
+  }
+  // une zone sortie de l'écran ne reçoit plus sa position : on cache sa couche
+  const visible = () => {
+    const r = ed.getVisibleRanges()
+    const inside = r.some((x) => afterLine >= x.startLineNumber - 1 && afterLine <= x.endLineNumber)
+    if (!inside) node.style.display = 'none'
+  }
+  layout()
+  const subs = [ed.onDidLayoutChange(layout), ed.onDidScrollChange(visible)]
+  const w = {
+    node,
+    remove: () => {
+      ed.changeViewZones((a) => a.removeZone(zoneId))
+      ed.removeOverlayWidget(overlay)
+      subs.forEach((d) => d.dispose())
+    },
+  }
+  widgets[bucket].push(w)
+  return w
+}
+
+function clearZones() {
+  for (const k of ['ed', 'diff']) { widgets[k].forEach((w) => w.remove()); widgets[k] = [] }
+}
+const stop = (el) => { for (const t of ['keydown', 'keyup', 'keypress']) el.addEventListener(t, (e) => e.stopPropagation()); return el }
+
+function linesOf(model, a, b) {
+  if (!a || !b || b < a) return []
+  const out = []
+  for (let i = a; i <= b; i++) out.push(model.getLineContent(i))
+  return out
+}
+
+function renderZones() {
+  // un rafraîchissement pendant que tu écris : on garde le focus et le curseur
+  const act = document.activeElement
+  if (act && act._draft) { act._draft.focus = true; act._draft.caret = [act.selectionStart, act.selectionEnd] }
+  clearZones()
+  if (view.kind !== 'file' || !cur) return
+  const f = files.get(cur)
+  if (!f) return
+  const isDiff = !$('diff').hidden
+  const ed = isDiff ? diff.getModifiedEditor() : editor
+  const bucket = isDiff ? 'diff' : 'ed'
+  f.hunks = []
+  const max = f.model.getLineCount()
+  // barres « bloc modifié par Claude »
+  if (isDiff && P.compare === 'claude' && isChanged(cur) && f.original) {
+    for (const c of diff.getLineChanges() || []) {
+      const orig = linesOf(f.original, c.originalStartLineNumber, c.originalEndLineNumber)
+      const mod = linesOf(f.model, c.modifiedStartLineNumber, c.modifiedEndLineNumber)
+      const key = cur + '|' + hash(orig.join('\n') + '\u0001' + mod.join('\n'))
+      f.hunks.push(key)
+      const ok = srv.accepted.includes(key)
+      const start = Math.max(1, c.modifiedStartLineNumber)
+      const end = c.modifiedEndLineNumber === 0 ? start : c.modifiedEndLineNumber
+      const node = stop(h('div', { class: 'zone hunk' + (ok ? ' ok' : '') },
+        h('span', {}, ok ? '✅ Validé' : '✏️ Bloc modifié par Claude'),
+        h('button', { class: 'okb', onclick: () => event({ type: 'accept', keys: [key], on: !ok }) }, ok ? 'Annuler la validation' : '✅ Accepter'),
+        h('button', { class: 'badb', onclick: () => rejectHunk(c, orig, mod) }, '❌ Rejeter'),
+        h('button', { onclick: () => startComment(Math.min(start, max), Math.min(end, max)) }, '💬 Commenter'),
+      ))
+      addWidget(ed, bucket, c.modifiedEndLineNumber === 0 ? c.modifiedStartLineNumber : c.modifiedStartLineNumber - 1, 28, node)
+    }
+  }
+  // commentaires et rejets en attente sur ce fichier
+  for (const it of srv.review.filter((x) => x.path === cur && x.kind !== 'restore')) {
+    if (!it.line) continue
+    const after = Math.min(max, it.endLine || it.line)
+    const node = stop(h('div', { class: 'cbox' + (it.kind === 'reject' ? ' reject' : '') },
+      h('div', { class: 'who' }, it.kind === 'reject' ? '❌ Bloc rejeté, Claude sera prévenu' : it.kind === 'snippet' ? `📎 Extrait joint au prochain prompt` : `💬 Ligne${it.endLine && it.endLine !== it.line ? `s ${it.line}-${it.endLine}` : ` ${it.line}`} · pour Claude, au prochain prompt`,
+        h('span', { class: 'x', title: 'Retirer', onclick: () => event({ type: 'uncomment', id: it.id }) }, '✕')),
+      it.text ? h('div', { class: 'ctext' }, it.text) : null,
+    ))
+    addWidget(ed, bucket, after, 44 + Math.ceil((it.text || '').length / 90) * 18, node)
+  }
+  // brouillons ouverts
+  for (const d of drafts.filter((x) => x.path === cur)) draftWidget(ed, bucket, d, max)
+  updateFileButtons()
+  renderTabs()
+}
+
+function startComment(line, endLine) {
+  if (view.kind !== 'file' || !cur) return
+  let d = drafts.find((x) => x.path === cur && x.line === line && x.endLine === endLine)
+  if (!d) { d = { path: cur, line, endLine, text: '' }; drafts.push(d) }
+  d.focus = true
+  renderZones()
+}
+
+function draftWidget(ed, bucket, d, max) {
+  const f = files.get(cur)
+  const line = Math.min(d.line, max)
+  const endLine = Math.min(d.endLine, max)
+  const ta = h('textarea', { placeholder: 'Ton commentaire pour Claude…' })
+  ta.value = d.text
+  ta._draft = d
+  ta.addEventListener('input', () => { d.text = ta.value })
+  const close = () => { drafts.splice(drafts.indexOf(d), 1); renderZones() }
+  const submit = async () => {
+    const text = ta.value.trim()
+    if (!text) return ta.focus()
+    drafts.splice(drafts.indexOf(d), 1)
+    await event({ type: 'comment', path: cur, line, endLine, text, code: linesOf(f.model, line, endLine).join('\n') })
+    toast('💬 Commentaire ajouté : il partira avec ton prochain prompt')
+  }
+  ta.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit() }
+    if (e.key === 'Escape') close()
+  })
+  const node = stop(h('div', { class: 'cbox draft' },
+    h('div', { class: 'who' }, `💬 Ligne${endLine > line ? `s ${line}-${endLine}` : ` ${line}`} · joint à ton prochain prompt`),
+    ta,
+    h('div', { class: 'acts' }, h('button', { onclick: close }, 'Annuler'), h('button', { class: 'primary', onclick: submit }, 'Commenter (Ctrl+Entrée)')),
+  ))
+  addWidget(ed, bucket, endLine, 132, node)
+  if (d.focus) {
+    const [a, b] = d.caret || [ta.value.length, ta.value.length]
+    d.focus = false
+    d.caret = null
+    setTimeout(() => { ta.focus({ preventScroll: true }); ta.setSelectionRange(a, b) }, 0)
+  }
+}
+
+function updateFileButtons() {
+  const f = cur && files.get(cur)
+  const all = f && f.hunks && f.hunks.length > 0 && f.hunks.every((k) => srv.accepted.includes(k))
+  $('fileOk').textContent = all ? '✅ Fichier validé' : '✅ Fichier'
+  $('fileOk').classList.toggle('on', !!all)
+}
+
+async function rejectHunk(c, orig, mod) {
+  const f = files.get(cur)
+  const all = f.model.getValue().split('\n')
+  if (c.modifiedEndLineNumber === 0) all.splice(c.modifiedStartLineNumber, 0, ...orig)
+  else all.splice(c.modifiedStartLineNumber - 1, c.modifiedEndLineNumber - c.modifiedStartLineNumber + 1, ...orig)
+  const text = all.join('\n')
+  const line = Math.max(1, c.modifiedStartLineNumber)
+  const r = await api('/api/save', { method: 'POST', body: JSON.stringify({
+    path: cur, text, base: f.base, kind: 'reject',
+    info: { line, endLine: line + Math.max(0, orig.length - 1), code: mod.join('\n') },
+  }) })
+  if (r.status === 409) return showBanner('⚠️ Le fichier a changé sur le disque : recharge avant de rejeter.')
+  if (!r.ok) return status('⚠️ Rejet refusé')
+  f.base = text
+  f.model.pushEditOperations([], [{ range: f.model.getFullModelRange(), text }], () => null)
+  toast('❌ Bloc rejeté : Claude sera prévenu au prochain prompt')
+}
+
+async function rejectFile() {
+  const f = cur && files.get(cur)
+  if (!f || f.before === null) return
+  const isNew = f.before === '' && srv.history.some((t) => t.files.some((x) => x.path === cur && x.isNew))
+  const ok = await confirmBox(isNew
+    ? `Supprimer <b>${esc(rel(cur))}</b>, que Claude a créé ?`
+    : `Remettre tout <b>${esc(rel(cur))}</b> dans son état d'avant les modifs de Claude ?`, isNew ? 'Supprimer' : 'Rejeter le fichier')
+  if (!ok) return
+  const r = await api('/api/save', { method: 'POST', body: JSON.stringify({
+    path: cur, text: f.before, base: f.base, kind: isNew ? 'delete' : 'reject', info: { file: true },
+  }) })
+  if (r.status === 409) return showBanner('⚠️ Le fichier a changé sur le disque : recharge avant de rejeter.')
+  if (!r.ok) return status('⚠️ Rejet refusé')
+  toast('❌ Fichier rejeté : Claude sera prévenu au prochain prompt')
+  if (isNew) closeTab(cur)
+}
+
+// ---------- historique ----------
+function renderHistory() {
+  const turns = [...srv.history].reverse()
+  $('nHist').hidden = turns.length === 0
+  $('nHist').textContent = turns.length
+  const box = $('history')
+  box.replaceChildren()
+  if (!turns.length) return box.append(h('div', { class: 'hint' }, 'Aucune modif de Claude pour l\'instant. Chaque prompt qui touche des fichiers apparaîtra ici.'))
+  const touched = [...new Map(srv.history.flatMap((t) => t.files.map((f) => [f.path, f]))).values()]
+  box.append(h('div', { class: 'turn' },
+    h('div', { class: 'head' }, h('b', {}, 'Toute la session'), h('span', { class: 't' }, `${touched.length} fichier${touched.length > 1 ? 's' : ''}`)),
+    touched.map((f) => h('div', { class: 'f' + (view.kind === 'session' && view.path === f.path ? ' cur' : ''), onclick: () => openTurn('session', f.path) }, h('span', {}, rel(f.path)))),
+  ))
+  for (const t of turns) {
+    box.append(h('div', { class: 'turn' },
+      h('div', { class: 'head' }, h('b', {}, `Prompt ${t.id}`), h('span', { class: 't' }, fmtTime(t.at))),
+      h('div', { class: 'prompt', title: t.prompt }, t.prompt || '(sans texte)'),
+      t.files.map((f) => h('div', { class: 'f' + (view.kind === 'turn' && view.id === t.id && view.path === f.path ? ' cur' : ''), onclick: () => openTurn(t.id, f.path) },
+        h('span', {}, (f.isNew ? '🆕 ' : '') + f.rel),
+        h('span', { class: 's' }, h('span', { class: 'add' }, `+${f.add}`), ' ', h('span', { class: 'del' }, `-${f.del}`)),
+      )),
+      h('div', { class: 'acts' }, h('button', { onclick: () => restore(t) }, '↶ Revenir avant ce prompt')),
+    ))
+  }
+}
+async function restore(t, force = false) {
+  const later = srv.history.filter((x) => x.id >= t.id)
+  const n = new Set(later.flatMap((x) => x.files.map((f) => f.path))).size
+  if (!force) {
+    const ok = await confirmBox(`Remettre <b>${n} fichier${n > 1 ? 's' : ''}</b> dans leur état d'avant le <b>prompt ${t.id}</b>${later.length > 1 ? ` (et les ${later.length - 1} suivants)` : ''} ?<br><br>Claude sera prévenu au prochain prompt.`, '↶ Revenir')
+    if (!ok) return
+  }
+  event({ type: 'restore', turnId: t.id, force })
+}
+
+// ---------- review (panneau) ----------
+function renderReview() {
+  const items = srv.review
+  $('nRev').hidden = items.length === 0
+  $('nRev').textContent = items.length
+  const box = $('review')
+  box.replaceChildren()
+  if (!items.length) {
+    box.append(h('div', { class: 'hint' }, 'Rien en attente. Clique sur le + d\'une ligne pour commenter, Ctrl+L pour joindre du code, ou ❌ Rejeter sur un bloc. Tout part avec ton prochain prompt.'))
+  } else {
+    box.append(h('div', { class: 'pad' }, h('button', { class: 'primary', style: 'width:100%', onclick: () => event({ type: 'sendReview' }) }, `📨 Envoyer maintenant (${items.length})`)))
+    box.append(h('div', { class: 'hint' }, 'Sinon, joint automatiquement à ton prochain prompt.'))
+  }
+  for (const it of items) {
+    const icon = it.kind === 'reject' ? '❌' : it.kind === 'restore' ? '↶' : it.kind === 'snippet' ? '📎' : '💬'
+    const where = it.path ? `${rel(it.path)}${it.line ? `:${it.line}${it.endLine && it.endLine !== it.line ? '-' + it.endLine : ''}` : ''}` : 'Restauration'
+    box.append(h('div', { class: 'item', onclick: () => it.path && openFile(it.path, { line: it.line || 1 }) },
+      h('div', { class: 'top' }, `${icon} ${where}`, h('span', { class: 'x', title: 'Retirer', onclick: (e) => { e.stopPropagation(); event({ type: 'uncomment', id: it.id }) } }, '✕')),
+      it.text ? h('div', { class: 'txt' }, it.text) : null,
+      it.code ? h('code', {}, it.code.split('\n').slice(0, 3).join('\n')) : null,
+    ))
+  }
+}
+
+// ---------- recherche ----------
+let qCase = false
+let qTimer
+async function runSearch() {
+  const q = $('q').value
+  const box = $('results')
+  if (q.length < 2) return box.replaceChildren()
+  const r = await api(`/api/search?q=${encodeURIComponent(q)}&case=${qCase ? 1 : 0}`)
+  if (!r.ok) return
+  const { results } = await r.json()
+  box.replaceChildren()
+  if (!results.length) return box.append(h('div', { class: 'hint' }, 'Aucun résultat.'))
+  let last = null
+  for (const m of results) {
+    if (m.path !== last) { box.append(h('div', { class: 'resf', title: m.rel }, m.rel)); last = m.path }
+    const i = m.col - 1
+    box.append(h('div', { class: 'res', onclick: () => openFile(m.path, { line: m.line }) },
+      `${m.line}  `, m.text.slice(Math.max(0, i - 30), i), h('mark', {}, m.text.slice(i, i + q.length)), m.text.slice(i + q.length, i + q.length + 80)))
+  }
+  if (results.length >= 400) box.append(h('div', { class: 'hint' }, 'Plus de 400 résultats : précise ta recherche.'))
+}
+
+// ---------- ouverture rapide (Ctrl+P) ----------
+let qoFiles = []
+let qoSel = 0
+const score = (q, s) => {
+  let i = 0, sc = 0, prev = -2
+  for (let j = 0; j < s.length && i < q.length; j++) if (s[j] === q[i]) { sc += j === prev + 1 ? 3 : 1; prev = j; i++ }
+  return i === q.length ? sc : -1
+}
+async function quickOpen() {
+  $('qo').classList.add('show')
+  $('qoIn').value = ''
+  $('qoIn').focus()
+  const r = await api('/api/files')
+  qoFiles = r.ok ? (await r.json()).files : []
+  renderQo()
+}
+function renderQo() {
+  const q = $('qoIn').value.toLowerCase().replace(/\s+/g, '')
+  const list = q
+    ? qoFiles.map((f) => ({ f, s: score(q, f.rel.toLowerCase()) + (base(f.rel).toLowerCase().includes(q) ? 20 : 0) })).filter((x) => x.s >= 0).sort((a, b) => b.s - a.s).slice(0, 60).map((x) => x.f)
+    : [...new Set([...srv.changes.map((c) => c.path), ...tabs])].map((p) => ({ path: p, rel: rel(p) })).concat(qoFiles.slice(0, 40))
+  qoSel = Math.min(qoSel, Math.max(0, list.length - 1))
+  $('qoList').replaceChildren(...list.map((f, i) => h('div', { class: 'qo' + (i === qoSel ? ' cur' : ''), onclick: () => { closeQo(); openFile(f.path) } },
+    h('span', {}, base(f.rel)), h('span', { class: 'd' }, f.rel))))
+  $('qoList').dataset.paths = JSON.stringify(list.map((f) => f.path))
+}
+function closeQo() { $('qo').classList.remove('show') }
+
+// ---------- état et temps réel ----------
+async function refreshState() {
+  const r = await api('/api/state')
+  if (!r.ok) return
+  const prev = new Set(srv.changes.map((c) => c.path))
+  srv = await r.json()
+  $('name').textContent = srv.name
+  if (!prefsLoaded) {
+    if (srv.prefs && typeof srv.prefs === 'object') {
+      P = { ...P, ...srv.prefs, views: srv.prefs.views || {} }
+      tabs = Array.isArray(srv.prefs.tabs) ? srv.prefs.tabs : []
+    }
+    prefsLoaded = true
+    applyLayoutPrefs()
+  }
+  await refreshGit()
+  renderTabs()
+  renderTree()
+  renderHistory()
+  renderReview()
+  const f = cur && files.get(cur)
+  const busy = f && view.kind === 'file' && f.model.getValue() !== f.base
+  const fresh = srv.changes.find((c) => !prev.has(c.path))
+  if (fresh && !busy && prev.size + 1 > 0 && document.readyState === 'complete' && started) return openFile(fresh.path)
+  if (cur && view.kind === 'file' && !busy) {
+    const had = f && f.before !== null && f.before !== undefined
+    if (P.compare === 'claude' && isChanged(cur) !== had) return openFile(cur, { keepView: true })
+  }
+  renderZones()
+}
+
+let started = false
+function connect() {
+  const es = new EventSource(`/events?t=${encodeURIComponent(T)}`)
+  es.onopen = () => { $('dot').classList.add('on'); $('dot').title = 'Connecté'; refreshState() }
+  es.onerror = () => { $('dot').classList.remove('on'); $('dot').title = 'Déconnecté (session Claude fermée ?)' }
+  es.onmessage = async (m) => {
+    const ev = JSON.parse(m.data)
+    if (ev.type === 'state') return refreshState()
+    if (ev.type === 'toast') return toast(ev.text)
+    if (ev.type === 'activity') {
+      const a = $('activity')
+      a.className = ev.label ? '' : 'idle'
+      a.replaceChildren(...(ev.label ? [h('span', { class: 'spin' }, '◐'), ' Claude ', ev.label] : ['Claude réfléchit…']))
+      return
+    }
+    if (ev.type === 'done') {
+      $('activity').className = 'idle'
+      $('activity').textContent = '✅ Claude a terminé · ' + fmtTime(Date.now())
+      if (P.notify) notifyDone()
+      return
+    }
+    if (ev.type === 'restoreConflict') {
+      const t = srv.history.find((x) => x.id === ev.turnId)
+      const ok = await confirmBox(`Ces fichiers ont changé depuis les modifs de Claude :<br><b>${ev.files.map((p) => esc(rel(p))).join('<br>')}</b><br><br>Les restaurer quand même ? Les changements faits depuis seront perdus.`, 'Restaurer quand même')
+      if (ok && t) restore(t, true)
+      return
+    }
+    if (ev.type === 'file' && ev.path === cur && view.kind === 'file') {
+      const f = files.get(cur)
+      if (f && f.model.getValue() === f.base) openFile(cur, { keepView: true })
+      else showBanner('⚠️ Ce fichier vient de changer sur le disque. Tes modifications non sauvegardées sont gardées.')
+      refreshGit().then(renderTree)
+    }
+  }
+}
+
+// ---------- notification de fin ----------
+function beep() {
+  try {
+    const ctx = new AudioContext()
+    ;[660, 880].forEach((f, i) => {
+      const o = ctx.createOscillator(), g = ctx.createGain()
+      o.frequency.value = f; o.connect(g); g.connect(ctx.destination)
+      const t0 = ctx.currentTime + i * 0.14
+      g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.15, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.13)
+      o.start(t0); o.stop(t0 + 0.14)
+    })
+  } catch {}
+}
+function notifyDone() {
+  beep()
+  if ('Notification' in window && Notification.permission === 'granted' && document.hidden)
+    new Notification('Claude a terminé', { body: srv.name, tag: 'ide-for-claude-' + srv.name })
+  if (document.hidden) {
+    const t = document.title
+    document.title = '✅ ' + t
+    const back = () => { document.title = t; document.removeEventListener('visibilitychange', back) }
+    document.addEventListener('visibilitychange', back)
+  }
+}
+
+// ---------- démarrage ----------
+window.MonacoEnvironment = {
+  getWorkerUrl: () =>
+    `data:text/javascript;charset=utf-8,${encodeURIComponent(
+      `self.MonacoEnvironment={baseUrl:'${CDN}/'};importScripts('${CDN}/vs/base/worker/workerMain.js');`,
+    )}`,
+}
+require.config({ paths: { vs: CDN + '/vs' } })
+require(['vs/editor/editor.main'], async () => {
+  monaco = window.monaco
+  const dark = matchMedia('(prefers-color-scheme: dark)')
+  const theme = () => monaco.editor.setTheme(dark.matches ? 'vs-dark' : 'vs')
+  theme()
+  dark.addEventListener('change', theme)
+  const common = { automaticLayout: true, fontSize: 13, minimap: { enabled: false }, scrollBeyondLastLine: false, glyphMargin: true }
+  editor = monaco.editor.create($('ed'), common)
+  diff = monaco.editor.createDiffEditor($('diff'), { ...common, originalEditable: false, readOnly: false, renderMarginRevertIcon: false, renderSideBySide: false, useInlineViewWhenSpaceIsLimited: false })
+  diff.onDidUpdateDiff(() => renderZones())
+
+  // actions communes aux deux éditeurs
+  const both = [editor, diff.getModifiedEditor()]
+  for (const ed of both) {
+    const bucket = ed === editor ? 'ed' : 'diff'
+    ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => save())
+    ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyP, () => quickOpen())
+    ed.addAction({
+      id: 'mi.send', label: '📎 Joindre la sélection pour Claude', contextMenuGroupId: 'navigation', contextMenuOrder: 0,
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyL],
+      run: (e) => {
+        const sel = e.getSelection()
+        const m = e.getModel()
+        if (!sel || !m) return
+        const s = sel.isEmpty() ? new monaco.Range(sel.startLineNumber, 1, sel.startLineNumber, m.getLineMaxColumn(sel.startLineNumber)) : sel
+        event({ type: 'selection', path: cur, startLine: s.startLineNumber, endLine: s.endLineNumber, code: m.getValueInRange(s) })
+      },
+    })
+    ed.addAction({
+      id: 'mi.comment', label: '💬 Commenter pour Claude', contextMenuGroupId: 'navigation', contextMenuOrder: 1,
+      run: (e) => {
+        if (view.kind !== 'file') return
+        const sel = e.getSelection()
+        startComment(sel.startLineNumber, sel.endLineNumber)
+      },
+    })
+    // un « + » au survol de chaque ligne, comme sur GitHub ; un clic sur le « + » ou le numéro commente
+    const plus = ed.createDecorationsCollection()
+    let plusLine = 0
+    ed.onMouseMove((e) => {
+      const line = view.kind === 'file' && e.target.position ? e.target.position.lineNumber : 0
+      if (line === plusLine) return
+      plusLine = line
+      plus.set(line ? [{ range: new monaco.Range(line, 1, line, 1), options: { glyphMarginClassName: 'mi-plus', glyphMarginHoverMessage: { value: 'Commenter cette ligne pour Claude' } } }] : [])
+    })
+    ed.onMouseLeave(() => { plusLine = 0; plus.clear() })
+    ed.onMouseDown((e) => {
+      if (view.kind !== 'file' || !e.target.position) return
+      const T = monaco.editor.MouseTargetType
+      if (e.target.type !== T.GUTTER_GLYPH_MARGIN && e.target.type !== T.GUTTER_LINE_NUMBERS) return
+      const line = e.target.position.lineNumber
+      const sel = ed.getSelection()
+      const inSel = sel && !sel.isEmpty() && line >= sel.startLineNumber && line <= sel.endLineNumber
+      setTimeout(() => startComment(inSel ? sel.startLineNumber : line, inSel ? sel.endLineNumber : line), 0)
+    })
+    ed.onDidScrollChange(() => savePrefs())
+  }
+
+  // boutons
+  $('save').onclick = () => save()
+  $('reload').onclick = () => cur && openFile(cur, { keepView: true })
+  $('back').onclick = () => cur && openFile(cur)
+  $('bannerReload').onclick = () => cur && openFile(cur, { keepView: true })
+  $('bannerForce').onclick = () => { hideBanner(); save(true) }
+  $('toggleSide').onclick = () => { P.sideBySide = !P.sideBySide; applyDiffOptions(); savePrefs() }
+  $('toggleFold').onclick = () => { P.fold = !P.fold; applyDiffOptions(); savePrefs() }
+  $('fileOk').onclick = () => {
+    const f = files.get(cur)
+    if (!f || !f.hunks.length) return
+    const all = f.hunks.every((k) => srv.accepted.includes(k))
+    event({ type: 'accept', keys: f.hunks, on: !all })
+  }
+  $('fileNo').onclick = () => rejectFile()
+  for (const b of $('cmpSeg').children) b.onclick = () => {
+    P.compare = b.dataset.c
+    for (const x of $('cmpSeg').children) x.classList.toggle('on', x === b)
+    savePrefs()
+    if (cur) openFile(cur, { keepView: true })
+  }
+  for (const b of $('sideTabs').children) b.onclick = () => showPanel(b.dataset.p)
+  $('qoBtn').onclick = () => quickOpen()
+  $('notifBtn').onclick = async () => {
+    P.notify = !P.notify
+    if (P.notify && 'Notification' in window && Notification.permission === 'default') await Notification.requestPermission()
+    $('notifBtn').textContent = P.notify ? '🔔' : '🔕'
+    toast(P.notify ? '🔔 Tu seras prévenu quand Claude a fini' : '🔕 Notifications coupées')
+    if (P.notify) beep()
+    savePrefs()
+  }
+  $('q').addEventListener('input', () => { clearTimeout(qTimer); qTimer = setTimeout(runSearch, 300) })
+  $('qCase').onclick = () => { qCase = !qCase; $('qCase').classList.toggle('on', qCase); runSearch() }
+  $('qoIn').addEventListener('input', () => { qoSel = 0; renderQo() })
+  $('qoIn').addEventListener('keydown', (e) => {
+    const paths = JSON.parse($('qoList').dataset.paths || '[]')
+    if (e.key === 'ArrowDown') { qoSel = Math.min(paths.length - 1, qoSel + 1); renderQo(); e.preventDefault() }
+    if (e.key === 'ArrowUp') { qoSel = Math.max(0, qoSel - 1); renderQo(); e.preventDefault() }
+    if (e.key === 'Enter' && paths[qoSel]) { closeQo(); openFile(paths[qoSel]) }
+    if (e.key === 'Escape') closeQo()
+  })
+  $('qo').addEventListener('mousedown', (e) => { if (e.target === $('qo')) closeQo() })
+
+  // largeur de la barre latérale
+  $('split').addEventListener('mousedown', (e) => {
+    e.preventDefault()
+    const move = (ev) => { P.side = Math.max(160, Math.min(640, ev.clientX)); document.getElementById('app').style.setProperty('--side', P.side + 'px') }
+    const up = () => { removeEventListener('mousemove', move); removeEventListener('mouseup', up); savePrefs() }
+    addEventListener('mousemove', move)
+    addEventListener('mouseup', up)
+  })
+
+  // raccourcis globaux
+  window.addEventListener('keydown', (e) => {
+    const mod = e.ctrlKey || e.metaKey
+    if (mod && !e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); save() }
+    if (mod && !e.shiftKey && e.key.toLowerCase() === 'p') { e.preventDefault(); quickOpen() }
+    if (mod && e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); showPanel('search'); $('q').focus(); $('q').select() }
+    if (e.key === 'Escape') { closeQo() }
+  }, true)
+  window.addEventListener('beforeunload', (e) => {
+    rememberView()
+    for (const f of files.values()) if (f.model.getValue() !== f.base) { e.preventDefault(); return }
+  })
+  window.addEventListener('focus', () => refreshGit().then(renderTree))
+
+  show(null)
+  await refreshState()
+  const hash0 = decodeURIComponent(location.hash.slice(1))
+  const first = hash0 || (srv.prefs && srv.prefs.cur) || (srv.changes.length ? srv.changes[srv.changes.length - 1].path : null)
+  if (first) await openFile(first)
+  started = true
+  connect()
+})
+</script>
+</body>
+</html>
