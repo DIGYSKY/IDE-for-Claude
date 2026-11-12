@@ -53,7 +53,27 @@ export type Queued = { id: string; text: string; at: number }
 export type PlanItem = { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm: string }
 /** de quoi remplir la barre d'état de la page */
 /** `line` : la sortie de la statusLine de Claude Code, avec ses couleurs de terminal */
-export type Status = { model?: string; tokens?: number; window?: number; percent?: number; usd?: number; at: number; line?: string }
+export type Status = { model?: string; effort?: string; permissionMode?: string; fast?: boolean; tokens?: number; window?: number; percent?: number; usd?: number; at: number; line?: string }
+/** un sous-agent lancé par Claude pendant la session, suivi en direct dans la page */
+export type SubAgent = {
+  id: string
+  /** la tâche, en quelques mots (la description de l'appel Agent) */
+  description: string
+  /** le type d'agent (general-purpose, Explore, un agent de plugin...) */
+  type: string
+  name?: string
+  /** l'agent qui l'a lancé, absent quand c'est Claude lui-même */
+  parent?: string
+  status: 'running' | 'done' | 'failed' | 'stopped'
+  start: number
+  end?: number
+  /** nombre d'appels d'outils */
+  tools: number
+  /** sa dernière action (« ✏️ modifie src/a.ts ») */
+  last?: string
+  /** le début de sa réponse finale */
+  answer?: string
+}
 
 declare module 'claude-code' {
   interface PluginState {
@@ -80,6 +100,7 @@ declare module 'claude-code' {
       plan: Shaped<PlanItem[]>
       busy: Shaped<boolean>
       status: Shaped<Status | null>
+      subagents: Shaped<SubAgent[]>
     }
   }
 }

@@ -127,6 +127,17 @@
   .cmd .acts, .run .acts { margin-left: auto; display: flex; gap: 4px; flex: none; }
   .cmd .acts button, .run .acts button, .idea .acts button { padding: 0 6px; font-size: 12px; }
   .run.live { border-color: var(--accent); }
+  .agent { margin: 4px 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); cursor: pointer; }
+  .agent:hover { border-color: var(--muted); }
+  .agent.live { border-color: var(--accent); }
+  .agent .top { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+  .agent .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .agent .meta, .agent .last { color: var(--muted); font-size: 11px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .agent.sub { margin-left: 22px; }
+  #agentModal { padding-top: 5vh; }
+  #agentModal .card { width: min(980px, 96vw); }
+  #agentModal .body { max-height: 74vh; overflow: auto; --conv-font: 14px; }
+  .toolAgent { margin-left: 8px; font-size: 11px; color: var(--accent); cursor: pointer; text-decoration: underline; }
   .st.ok { color: var(--ok); } .st.bad { color: var(--bad); } .st.live { color: var(--accent); }
   .by { font-size: 10px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; flex: none; }
   #saveForm { display: flex; gap: 6px; padding: 0 10px 6px; }
@@ -176,12 +187,20 @@
   .qi .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
   .qi button { padding: 0 6px; font-size: 11px; }
   #promptRow { display: flex; gap: 8px; padding: 4px 10px 4px; }
+  #promptImgs { display: flex; gap: 6px; padding: 4px 10px 0; flex-wrap: wrap; }
+  #promptImgs .img { position: relative; width: 64px; height: 48px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--bg); }
+  #promptImgs .img img { width: 100%; height: 100%; object-fit: cover; display: block; cursor: zoom-in; }
+  #promptImgs .img button { position: absolute; top: 1px; right: 1px; padding: 0 4px; font-size: 10px; line-height: 14px; border-radius: 4px; }
+  #promptEd.dropping { outline: 2px dashed var(--accent); }
   #promptEd { flex: 1; height: var(--dock, 92px); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--bg); }
   #promptEd.focus { border-color: var(--accent); }
   #promptSide { display: flex; flex-direction: column; gap: 4px; justify-content: flex-end; align-items: stretch; }
   #promptHint { font-size: 11px; color: var(--muted); padding: 0 10px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #busyNote { font-size: 11px; color: var(--accent); text-align: center; }
   #busyNote a { color: var(--muted); cursor: pointer; text-decoration: underline; }
+  button.stop { color: #f85149; border-color: rgba(248,81,73,.5); }
+  button.stop:hover { background: rgba(248,81,73,.15); }
+  .convBusy button.stop { margin-left: 10px; font-size: 12px; padding: 1px 8px; }
   /* barre d'état */
   #statusline { cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   #statusline:hover { color: var(--text); }
@@ -281,6 +300,7 @@
   .msg .who { font-size: max(11px, .78em); font-weight: 600; color: var(--muted); margin: 10px 0 3px; text-transform: uppercase; letter-spacing: .04em; }
   .msg.ai .who { color: var(--accent); }
   .msg.user .bubble { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; white-space: pre-wrap; word-break: break-word; }
+  .msg.notice { color: var(--muted); font-size: max(11px, .85em); padding-top: 2px; padding-bottom: 2px; }
   .msg.cmd .bubble { font-family: ui-monospace, monospace; font-size: .88em; color: var(--muted); background: transparent; border-style: dashed; padding: 4px 10px; white-space: pre-wrap; }
   .msg details.sum { border: 1px dashed var(--border); border-radius: 8px; padding: 4px 10px; color: var(--muted); }
   .msg details.sum summary { cursor: pointer; }
@@ -307,6 +327,24 @@
   #convView.notools .tools { display: none; }
   .convBusy { max-width: min(100%, 68em); margin: 10px auto 0; padding: 0 20px; color: var(--accent); font-size: var(--conv-font); }
   /* artefacts publiés */
+  #sessBar { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-bottom: 1px solid var(--border); flex: none; font-size: 12px; flex-wrap: wrap; }
+  #sessToggles { display: flex; align-items: center; gap: 6px 16px; padding: 4px 10px; border-bottom: 1px solid var(--border); flex: none; font-size: 12px; flex-wrap: wrap; }
+  #sessToggles .grp { display: inline-flex; align-items: center; gap: 6px; }
+  #sessToggles b { color: var(--muted); font-weight: 500; }
+  #sessToggles .seg button { padding: 1px 8px; font-size: 12px; }
+  #sessToggles select { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; font: inherit; max-width: 11em; }
+  #sessToggles #sessPermDefault { max-width: 17em; }
+  #sessToggles .chip { border: 1px solid var(--accent); color: var(--accent); border-radius: 10px; padding: 0 8px; white-space: nowrap; }
+  #sessBar select { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; font: inherit; }
+  #sessPick { max-width: 50%; display: inline-flex; gap: 4px; align-items: center; }
+  #sessTitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  #sessList { flex: none; max-height: 45%; overflow: auto; border-bottom: 1px solid var(--border); background: var(--panel); padding: 6px 8px; }
+  #sessList .sess { display: flex; gap: 10px; align-items: baseline; padding: 5px 8px; border-radius: 6px; cursor: pointer; }
+  #sessList .sess:hover { background: var(--hover, rgba(127,127,127,.12)); }
+  #sessList .sess.cur { cursor: default; outline: 1px solid var(--accent); }
+  #sessList .sess .tt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #sessList .sess small { color: var(--muted); white-space: nowrap; }
+  #sessList .hint { padding: 4px 8px; }
   #convArts { flex: none; max-height: 40%; overflow: auto; border-bottom: 1px solid var(--border); background: var(--panel); padding: 8px 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
   .art { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
   .art .tt { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -410,6 +448,7 @@
       <button data-p="ideas" title="Boîte à idées">💡<span class="n" id="nIdeas" hidden></span></button>
       <button data-p="ann" title="Annotations de Claude">📍<span class="n" id="nAnn" hidden></span></button>
       <button data-p="runs" title="Commandes">▶<span class="n" id="nRuns" hidden></span></button>
+      <button data-p="agents" title="Sous-agents de Claude">🤖<span class="n" id="nAgents" hidden></span></button>
     </div>
     <div class="panel" id="p-files"><div id="tree"></div></div>
     <div class="panel" id="p-search">
@@ -428,6 +467,7 @@
       <div id="ideas"></div>
     </div>
     <div class="panel" id="p-ann"><div id="anns"></div></div>
+    <div class="panel" id="p-agents"><div id="agents"></div></div>
     <div class="panel" id="p-runs">
       <div class="row2"><input type="text" id="runCmd" placeholder="Une commande (Entrée pour la lancer)" spellcheck="false">
         <button id="runGo" class="primary" title="Lancer">▶</button><button id="runSave" title="Enregistrer cette commande">💾</button></div>
@@ -469,6 +509,17 @@
           <button id="convTools" title="Afficher les appels d'outils de Claude">🔧 Outils</button>
           <button id="convFollow" class="on" title="Suivre la fin de la conversation">⇩ Suivre</button>
           <button id="convReload" title="Recharger toute la conversation">↻</button></div>
+        <div id="sessBar">
+          <button id="sessPick" title="Changer de session : reprendre une conversation du projet, comme /resume"><span>🗂</span> <span id="sessTitle">Session</span> ▾</button>
+          <button id="sessNew" title="Nouvelle conversation, comme /clear : celle-ci reste dans la liste, tu pourras la reprendre">＋ Nouvelle</button>
+        </div>
+        <div id="sessToggles">
+          <span class="grp" title="Comme /model dans le terminal : devient aussi ton modèle par défaut"><b>Modèle</b> <span class="seg" id="sessModel"></span><select id="sessModelMore" title="Autres modèles (1M de contexte, par défaut…)"></select></span>
+          <span class="grp" title="Comme /effort dans le terminal : devient aussi ton effort par défaut"><b>Effort</b> <span class="seg" id="sessEffort"></span></span>
+          <span class="grp"><b>Permissions</b> <span id="sessPerm" class="chip"></span><span class="seg"><button id="sessPlan">📋 Plan</button></span>
+            <select id="sessPermDefault" title="Le mode de permission des NOUVELLES sessions (/config). Celui de la session en cours se change avec Maj+Tab dans le terminal."></select></span>
+        </div>
+        <div id="sessList" hidden></div>
         <div id="convArts" hidden></div>
         <div id="convList"></div>
       </div>
@@ -485,9 +536,10 @@
       <div id="question" hidden></div>
       <div id="pendingBar" hidden></div>
       <div id="queue"></div>
+      <div id="promptImgs" hidden></div>
       <div id="promptRow"><div id="promptEd"></div>
-        <div id="promptSide"><div id="busyNote" hidden></div><button id="promptSend" class="primary" title="Envoyer à Claude (Ctrl+Entrée)">Envoyer</button><button id="promptCli" title="Mettre le prompt dans la zone de saisie du terminal, sans l'envoyer">⤓ Terminal</button></div></div>
-      <div id="promptHint">@ fichier · @fichier:lignes · / commandes et skills · #i idée · Ctrl+L dans le code : joindre la sélection · ↑ ↓ prompts précédents · Ctrl+Entrée : envoyer</div>
+        <div id="promptSide"><div id="busyNote" hidden></div><button id="promptStop" class="stop" hidden>⏹ Arrêter</button><button id="promptSend" class="primary" title="Envoyer à Claude (Ctrl+Entrée)">Envoyer</button><button id="promptCli" title="Mettre le prompt dans la zone de saisie du terminal, sans l'envoyer">⤓ Terminal</button></div></div>
+      <div id="promptHint">@ fichier · @fichier:lignes · / commandes et skills · #i idée · coller ou glisser une image · Ctrl+L dans le code : joindre la sélection · ↑ ↓ prompts précédents · Ctrl+Entrée : envoyer</div>
     </div>
   </main>
   <footer>
@@ -509,6 +561,8 @@
   <div class="acts"><button id="keysEdit">⚙️ Personnaliser</button><button id="keysClose" class="primary">Fermer</button></div></div></div>
 <div class="modal" id="dash"><div class="card"><div class="body" id="dashBody"></div>
   <div class="acts"><span class="hint" id="dashInfo" style="margin-right:auto"></span><button id="dashRefresh" title="Actualiser">↻ Actualiser</button><button id="dashClose" class="primary">Fermer</button></div></div></div>
+<div class="modal" id="agentModal"><div class="card"><div class="body"><div id="agentHead"></div><div id="agentBody" class="md-conv"></div></div>
+  <div class="acts"><span class="hint" id="agentInfo" style="margin-right:auto"></span><button id="agentRefresh" title="Actualiser">↻ Actualiser</button><button id="agentClose" class="primary">Fermer</button></div></div></div>
 <div id="toasts"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
@@ -784,7 +838,10 @@ async function openFile(p, { keepView = false, line = null } = {}) {
   let f = files.get(p)
   const uri = monaco.Uri.file(p)
   if (!f) {
-    f = { model: monaco.editor.getModel(uri) || monaco.editor.createModel(data.text, langOf(p), uri), hunks: [] }
+    // déjà chargé pour la navigation entre fichiers : on repart du contenu du disque
+    const known = monaco.editor.getModel(uri)
+    if (known && known.getValue() !== data.text) known.setValue(data.text)
+    f = { model: known || monaco.editor.createModel(data.text, langOf(p), uri), hunks: [] }
     f.model.onDidChangeContent(() => { updateDirty() })
     files.set(p, f)
   }
@@ -821,6 +878,7 @@ async function openFile(p, { keepView = false, line = null } = {}) {
   renderTabs()
   renderTree()
   renderZones()
+  applyEditorSettings()
   history.replaceState(null, '', `?t=${encodeURIComponent(T)}#${encodeURIComponent(p)}`)
   savePrefs()
 }
@@ -856,9 +914,54 @@ function updateDirty() {
   renderTabs()
 }
 
+/** Formate le fichier ouvert : avec le Prettier du projet, sinon le formateur de Monaco (JS, TS, JSON, CSS, HTML). */
+async function formatCurrent(silent = false) {
+  const f = view.kind === 'file' && cur && files.get(cur)
+  if (!f) return false
+  const text = f.model.getValue()
+  const r = await api('/api/format', { method: 'POST', body: JSON.stringify({ path: cur, text }) }).then((x) => x.json()).catch(() => ({}))
+  if (typeof r.text === 'string') {
+    if (r.text !== text) {
+      const ed = codeEditor()
+      const sel = ed ? ed.getSelections() : null
+      f.model.pushEditOperations(sel || [], [{ range: f.model.getFullModelRange(), text: r.text }], () => sel)
+    }
+    if (!silent) toast('✨ Formaté avec le Prettier du projet')
+    return true
+  }
+  const ed = codeEditor()
+  const action = ed && ed.getAction('editor.action.formatDocument')
+  if (action && action.isSupported()) {
+    await action.run()
+    if (!silent) toast('✨ Formaté' + (r.error ? ` (Prettier n'a pas pu : ${r.error})` : ''))
+    return true
+  }
+  if (!silent) toast(r.error ? `⚠️ Prettier : ${r.error}` : 'Pas de formateur pour ce langage : ajoute Prettier au projet (npm i -D prettier)')
+  return false
+}
+/** files.trimTrailingWhitespace et files.insertFinalNewline, comme VS Code à l'enregistrement */
+function tidyOnSave(model, eff) {
+  const edits = []
+  if (eff['files.trimTrailingWhitespace']) {
+    for (let i = 1; i <= model.getLineCount(); i++) {
+      const line = model.getLineContent(i)
+      const end = line.replace(/\s+$/, '').length
+      if (end < line.length) edits.push({ range: new monaco.Range(i, end + 1, i, line.length + 1), text: '' })
+    }
+  }
+  const last = model.getLineCount()
+  if (eff['files.insertFinalNewline'] && model.getLineContent(last) !== '') {
+    const col = model.getLineMaxColumn(last)
+    edits.push({ range: new monaco.Range(last, col, last, col), text: model.getEOL() })
+  }
+  if (edits.length) model.pushEditOperations([], edits, () => null)
+}
 async function save(force = false) {
   const f = view.kind === 'file' && cur && files.get(cur)
   if (!f) return
+  const eff = settingsFor(f.model.getLanguageId())
+  if (eff['editor.formatOnSave']) await formatCurrent(true)
+  tidyOnSave(f.model, eff)
   const text = f.model.getValue()
   const r = await api('/api/save', { method: 'POST', body: JSON.stringify({ path: cur, text, base: f.base, force }) })
   if (r.status === 409) return showBanner('⚠️ Le fichier a changé sur le disque depuis que tu l\'as ouvert.')
@@ -1593,6 +1696,162 @@ function renderDock() {
   $('busyNote').hidden = !srv.busy
   if (srv.busy) $('busyNote').replaceChildren('⏳ Claude travaille ', h('a', { title: 'Si Claude a été interrompu et que la file reste bloquée', onclick: () => event({ type: 'busy.reset' }) }, 'débloquer'))
   $('promptSend').textContent = srv.busy ? 'Mettre en file' : 'Envoyer'
+  $('promptStop').hidden = !srv.busy
+  $('promptStop').title = 'Arrêter Claude, comme Échap dans le terminal' + (firstKey('claude.stop') ? ` (${firstKey('claude.stop')})` : '')
+}
+// ---------- sous-agents : panneau 🤖 et fenêtre de leur conversation ----------
+const AGENT_ST = { running: ['live', '◐ en cours'], done: ['ok', '✅ fini'], failed: ['bad', '❌ échec'], stopped: ['', '⏹ arrêté'] }
+const agentView = { id: null, items: [], timer: null }
+function renderAgents() {
+  const list = srv.subagents || []
+  const live = list.filter((a) => a.status === 'running').length
+  $('nAgents').hidden = !live
+  $('nAgents').textContent = live
+  const box = $('agents')
+  if (!list.length) return box.replaceChildren(h('div', { class: 'hint' }, 'Aucun sous-agent pour l\'instant. Quand Claude en lance (outil Agent), ils apparaissent ici, en direct.'))
+  // les plus récents d'abord ; un agent lancé par un autre agent se range sous lui
+  const sorted = [...list].sort((a, b) => b.start - a.start)
+  const ids = new Set(list.map((a) => a.id))
+  const roots = sorted.filter((a) => !a.parent || !ids.has(a.parent))
+  const rows = []
+  const add = (a, depth) => {
+    rows.push(agentCard(a, depth))
+    for (const c of sorted.filter((x) => x.parent === a.id)) add(c, depth + 1)
+  }
+  for (const a of roots) add(a, 0)
+  box.replaceChildren(...rows)
+}
+function agentCard(a, depth) {
+  const [cls, label] = AGENT_ST[a.status] || ['', a.status]
+  const time = fmtDur((a.end || Date.now()) - a.start)
+  return h('div', { class: 'agent' + (a.status === 'running' ? ' live' : '') + (depth ? ' sub' : ''), title: (a.description || '') + (a.answer ? '\n\n' + a.answer : ''), onclick: () => openAgent(a.id) },
+    h('div', { class: 'top' }, h('span', { class: 'nm' }, '🤖 ' + (a.description || a.name || a.id.slice(0, 8))), h('span', { class: 'st ' + cls }, label)),
+    h('div', { class: 'meta' }, [a.type || 'agent', time, `${a.tools} outil${a.tools > 1 ? 's' : ''}`].join(' · ')),
+    a.status === 'running' && a.last ? h('div', { class: 'last' }, a.last) : null)
+}
+function openAgent(id) {
+  agentView.id = id
+  agentView.items = []
+  $('agentModal').classList.add('show')
+  renderAgentView()
+  event({ type: 'agent.messages', id })
+  clearInterval(agentView.timer)
+  // tant que l'agent travaille, sa conversation se met à jour
+  agentView.timer = setInterval(() => {
+    const a = (srv.subagents || []).find((x) => x.id === agentView.id)
+    if (!document.hidden && a && a.status === 'running') event({ type: 'agent.messages', id: agentView.id })
+  }, 3000)
+}
+function closeAgent() {
+  if (!agentView.id) return
+  $('agentModal').classList.remove('show')
+  clearInterval(agentView.timer)
+  agentView.id = null
+}
+function refreshAgentView() { renderAgentHead() }
+function onAgentMessages(ev) {
+  if (ev.id !== agentView.id) return
+  agentView.items = ev.items || []
+  agentView.denied = !!ev.denied
+  renderAgentView()
+}
+function renderAgentHead() {
+  const a = (srv.subagents || []).find((x) => x.id === agentView.id)
+  const [cls, label] = a ? AGENT_ST[a.status] || ['', a.status] : ['', '']
+  $('agentHead').replaceChildren(h('h2', { style: 'margin:0 0 4px' }, '🤖 ' + (a ? a.description || a.name || a.type : 'Sous-agent')),
+    a ? h('div', { class: 'hint', style: 'padding:0 0 8px' }, h('span', { class: 'st ' + cls }, label), ` · ${a.type || 'agent'} · ${fmtDur((a.end || Date.now()) - a.start)} · ${a.tools} outil${a.tools > 1 ? 's' : ''}`) : null)
+  $('agentInfo').textContent = agentView.id ? `id ${agentView.id}` : ''
+}
+function renderAgentView() {
+  renderAgentHead()
+  const body = $('agentBody')
+  if (agentView.denied) return body.replaceChildren(h('div', { class: 'hint' }, 'Claude Code ne donne pas accès à la conversation de cet agent.'))
+  if (!agentView.items.length) return body.replaceChildren(h('div', { class: 'hint' }, 'Chargement…'))
+  let prev = null
+  body.replaceChildren(...agentView.items.map((x) => { const n = convNode(x, prev); prev = x.role; return n }))
+  // ici, « Toi » est la consigne que Claude a donnée à l'agent, et « Claude » l'agent lui-même
+  for (const w of body.querySelectorAll('.msg.user .who')) w.textContent = 'Consigne de Claude'
+  for (const w of body.querySelectorAll('.msg.ai .who')) w.textContent = 'Sous-agent'
+}
+
+// ---------- TypeScript et JavaScript : définition, survol, d'un fichier à l'autre ----------
+function setupCodeIntel() {
+  const ts = monaco.languages.typescript
+  const opts = {
+    target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.NodeJs,
+    allowJs: true, allowNonTsExtensions: true, esModuleInterop: true, jsx: ts.JsxEmit.ReactJSX, resolveJsonModule: true, skipLibCheck: true,
+  }
+  ts.typescriptDefaults.setCompilerOptions(opts)
+  ts.javascriptDefaults.setCompilerOptions(opts)
+  // sans node_modules, les erreurs de type seraient fausses (modules introuvables) : on garde la syntaxe seulement
+  ts.typescriptDefaults.setDiagnosticsOptions({ noSemanticValidation: true, noSyntaxValidation: false })
+  ts.javascriptDefaults.setDiagnosticsOptions({ noSemanticValidation: true, noSyntaxValidation: false })
+  ts.typescriptDefaults.setEagerModelSync(true)
+  ts.javascriptDefaults.setEagerModelSync(true)
+  // « aller à la définition » vers un autre fichier : on l'ouvre dans la page, sur la bonne ligne
+  monaco.editor.registerEditorOpener({
+    openCodeEditor(source, resource, where) {
+      if (resource.scheme !== 'file') return false
+      const line = where ? where.startLineNumber || where.lineNumber : null
+      openFile(resource.path, line ? { line } : {})
+      return true
+    },
+  })
+  loadSources()
+}
+let sourcesLoaded = false
+async function loadSources() {
+  if (sourcesLoaded) return
+  sourcesLoaded = true
+  const r = await api('/api/sources').catch(() => null)
+  if (!r || !r.ok) return
+  const { sources } = await r.json()
+  for (const x of sources || []) {
+    const uri = monaco.Uri.file(x.path)
+    if (!monaco.editor.getModel(uri)) monaco.editor.createModel(x.text, langOf(x.path), uri)
+  }
+}
+
+// ---------- images dans le prompt ----------
+async function attachImage(file) {
+  if (!/^image\/(png|jpeg|gif|webp)$/.test(file.type)) return toast('Image refusée : PNG, JPEG, GIF ou WebP')
+  if (file.size > 15e6) return toast('Image trop grosse (15 Mo au plus)')
+  const data = await new Promise((ok, ko) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1] || ''); r.onerror = ko; r.readAsDataURL(file) }).catch(() => '')
+  const r = await api('/api/image', { method: 'POST', body: JSON.stringify({ type: file.type, data }) }).catch(() => null)
+  const res = r ? await r.json().catch(() => ({})) : {}
+  if (!r || !r.ok || !res.path) return toast('⚠️ Image non enregistrée' + (res.error ? ' : ' + res.error : ''))
+  // au curseur, entourée d'espaces : la mention doit rester un mot à part
+  const sel = promptEd.getSelection()
+  const model = promptEd.getModel()
+  const before = sel.startColumn > 1 ? model.getValueInRange({ startLineNumber: sel.startLineNumber, startColumn: sel.startColumn - 1, endLineNumber: sel.startLineNumber, endColumn: sel.startColumn }) : ' '
+  const text = (/\s/.test(before) ? '' : ' ') + '@' + res.path + ' '
+  promptEd.executeEdits('image', [{ range: sel, text, forceMoveMarkers: true }])
+  promptEd.focus()
+  toast('🖼 Image jointe au prompt')
+}
+/** les images mentionnées dans le prompt, en vignettes au-dessus */
+function renderPromptImgs() {
+  const box = $('promptImgs')
+  const dir = srv.images
+  if (!dir || !promptEd) return
+  const paths = [...new Set([...promptEd.getValue().matchAll(/(?:^|\s)@(\S+\.(?:png|jpe?g|gif|webp))(?=\s|$)/gi)].map((m) => m[1]).filter((p) => p.startsWith(dir + srv.sep)))]
+  box.hidden = !paths.length
+  box.replaceChildren(...paths.map((p) => {
+    const name = p.slice(dir.length + 1)
+    const url = `/api/image?t=${encodeURIComponent(T)}&name=${encodeURIComponent(name)}`
+    return h('div', { class: 'img', title: p },
+      h('img', { src: url, alt: name, onclick: () => window.open(url, '_blank', 'noopener') }),
+      h('button', { title: 'Retirer l\'image du prompt', onclick: () => {
+        const v = promptEd.getValue().split('@' + p).join('').replace(/[ \t]{2,}/g, ' ')
+        promptEd.setValue(v)
+      } }, '✕'))
+  }))
+}
+
+/** ⏹ : arrête le tour de Claude en cours, comme Échap dans le terminal */
+function stopClaude() {
+  if (!srv.busy) return toast('Claude ne travaille pas en ce moment')
+  event({ type: 'interrupt' })
 }
 
 // ---------- réglages de l'éditeur (à la manière du settings.json de VS Code) ----------
@@ -1636,16 +1895,35 @@ function themeOf(settings) {
   if (!t && typeof vs === 'string') return /high contrast/i.test(vs) ? 'hc-black' : /light/i.test(vs) ? 'vs' : 'vs-dark'
   return null // auto : suit le système
 }
+/**
+ * Les réglages qui valent pour un langage, dans l'ordre de VS Code : les tiens, puis ceux du
+ * projet (.vscode/settings.json), puis tes « [langage] », puis ceux du projet.
+ */
+function settingsFor(lang) {
+  const user = srv.editor || {}
+  const proj = (srv.vscode && srv.vscode.settings) || {}
+  const plain = (o) => Object.fromEntries(Object.entries(o).filter(([k]) => !k.startsWith('[')))
+  // « [javascript][typescript] » vaut pour les deux
+  const forLang = (o) => Object.assign({}, ...Object.keys(o).filter((k) => lang && /^\[.+\]$/.test(k) && k.slice(1, -1).split('][').includes(lang)).map((k) => o[k] || {}))
+  return { ...plain(user), ...plain(proj), ...forLang(user), ...forLang(proj) }
+}
+const curLang = () => { const f = cur && files.get(cur); return f ? f.model.getLanguageId() : '' }
 let appliedEditor = ''
 function applyEditorSettings() {
   if (!monaco) return
-  const settings = srv.editor || {}
-  const key = JSON.stringify(settings)
+  const lang = curLang()
+  const settings = settingsFor(lang)
+  const key = JSON.stringify([settings, lang, cur])
   if (key === appliedEditor) return
   appliedEditor = key
   const opts = monacoOptions(settings)
   editor.updateOptions(opts)
   diff.updateOptions(opts)
+  // la tabulation est un réglage du fichier (du modèle), pas de l'éditeur
+  const f = cur && files.get(cur)
+  if (f && ('editor.tabSize' in settings || 'editor.insertSpaces' in settings)) {
+    f.model.updateOptions({ ...('editor.tabSize' in settings ? { tabSize: Number(settings['editor.tabSize']) || 4 } : {}), ...('editor.insertSpaces' in settings ? { insertSpaces: !!settings['editor.insertSpaces'] } : {}) })
+  }
   if (promptEd) promptEd.updateOptions({ fontSize: opts.fontSize, fontFamily: opts.fontFamily, lineHeight: opts.lineHeight, fontLigatures: opts.fontLigatures })
   applyTheme()
 }
@@ -1660,7 +1938,7 @@ function applyTheme() {
 // Sur Mac, ⌥ + lettre tape un caractère ({, [, |, ~…) : les raccourcis à lettre y passent par Ctrl, ailleurs par Alt.
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
 const LK = MAC ? 'Ctrl' : 'Alt'
-const PANELS = [['files', 'Fichiers'], ['search', 'Recherche'], ['history', 'Historique'], ['review', 'Revue'], ['ideas', 'Idées'], ['ann', 'Annotations'], ['runs', 'Commandes']]
+const PANELS = [['files', 'Fichiers'], ['search', 'Recherche'], ['history', 'Historique'], ['review', 'Revue'], ['ideas', 'Idées'], ['ann', 'Annotations'], ['runs', 'Commandes'], ['agents', 'Sous-agents']]
 const KEYMAP = [
   ['review.next', 'Revue', 'Modif suivante (puis fichier suivant)', ['F7', 'Ctrl+Alt+ArrowDown']],
   ['review.prev', 'Revue', 'Modif précédente', ['Shift+F7', 'Ctrl+Alt+ArrowUp']],
@@ -1676,6 +1954,8 @@ const KEYMAP = [
   ['file.save', 'Navigation', 'Enregistrer', ['Mod+S']],
   ['search', 'Navigation', 'Rechercher dans le projet', ['Mod+Shift+F']],
   ['goto.line', 'Navigation', 'Aller à la ligne', ['Ctrl+G']],
+  ['code.format', 'Navigation', 'Formater le fichier (Prettier du projet, sinon Monaco)', ['Alt+Shift+F']],
+  ['code.definition', 'Navigation', 'Aller à la définition (aussi Mod+clic)', ['F12']],
   ['side.toggle', 'Navigation', 'Masquer ou afficher la barre latérale', ['Mod+B']],
   ['conv.open', 'Navigation', 'Conversation (et retour au fichier)', [`${LK}+0`]],
   ['dash.open', 'Navigation', 'Claude Status', [`${LK}+9`]],
@@ -1688,6 +1968,7 @@ const KEYMAP = [
   ['code.prompt', 'Prompt et commandes', 'Mentionner la sélection dans le prompt', MAC ? ['Ctrl+L', 'Mod+L'] : ['Mod+L']],
   ['code.idea', 'Prompt et commandes', 'Nouvelle idée depuis la sélection', [`${LK}+I`]],
   ['prompt.toCli', 'Prompt et commandes', 'Mettre le prompt dans le terminal, sans l\'envoyer', ['Mod+Alt+Enter']],
+  ['claude.stop', 'Prompt et commandes', 'Arrêter Claude (comme Échap dans le terminal)', [`${LK}+.`]],
   ['run.again', 'Prompt et commandes', 'Relancer la dernière commande', [`${LK}+E`]],
   ['run.stop', 'Prompt et commandes', 'Arrêter la commande', [`${LK}+X`]],
   ['help', 'Aide', 'Liste des raccourcis', ['?', `${LK}+H`]],
@@ -1764,7 +2045,7 @@ const modalOpen = () => [...document.querySelectorAll('.modal.show')].map((m) =>
 
 function onShortcut(e) {
   if (recordingKey) return recordKey(e)
-  if (e.key === 'Escape') { closeQo(); closeSettings(); closeKeys(); closeDash() }
+  if (e.key === 'Escape') { closeQo(); closeSettings(); closeKeys(); closeDash(); closeAgent() }
   const c = comboOf(e)
   if (!c) return
   const id = keyIndexNow().get(c)
@@ -1883,6 +2164,7 @@ function runShortcut(id) {
     case 'conv.bigger': return stepConvFont(1)
     case 'conv.smaller': return stepConvFont(-1)
     case 'question.toggle': return toggleQuestion()
+    case 'claude.stop': return stopClaude()
     case 'dash.open': return $('dash').classList.contains('show') ? closeDash() : openDash()
     case 'file.open': return void quickOpen()
     case 'file.save': return void save()
@@ -1894,6 +2176,13 @@ function runShortcut(id) {
       return ed.trigger('kb', 'editor.action.gotoLine', null)
     }
     case 'side.toggle': return setSideHidden(!P.sideHidden)
+    case 'code.format': return codeEditor() ? void formatCurrent() : false
+    case 'code.definition': {
+      const ed = codeEditor()
+      if (!ed) return false
+      ed.focus()
+      return ed.trigger('kb', 'editor.action.revealDefinition', null)
+    }
     case 'prompt.focus':
       if (promptEd.hasTextFocus()) { const ed = codeEditor(); if (ed) ed.focus(); else document.activeElement?.blur() }
       else promptEd.focus()
@@ -2047,6 +2336,20 @@ function renderSettings() {
     for (const [k, label, kind, def] of EDITOR_FIELDS) body.append(setRow(label, k, control(kind, settings[k] ?? def, (v) => put(k, v))))
     body.append(h('h3', {}, 'settings.json de l\'éditeur'), h('p', { class: 'hint' }, 'Toutes les options de Monaco y passent (« editor.xxx »). Ctrl+S pour enregistrer.'))
     body.append(jsonBox('editor', JSON.stringify(settings, null, 2)))
+    // les règles du projet, comme dans VS Code : elles passent devant les tiennes pour ce projet
+    const vs = srv.vscode
+    const vsPath = srv.root + srv.sep + '.vscode' + srv.sep + 'settings.json'
+    const n = vs ? Object.keys(vs.settings || {}).length : 0
+    body.append(h('h3', {}, 'Réglages du projet (.vscode/settings.json)'),
+      h('p', { class: 'hint' }, vs ? (vs.error ? `⚠️ Fichier illisible : ${vs.error}` : `${n} réglage${n > 1 ? 's' : ''} pour ce projet, appliqué${n > 1 ? 's' : ''} par-dessus les tiens (et « [langage] » pour un langage). Pris en compte : editor.*, editor.formatOnSave, files.trimTrailingWhitespace, files.insertFinalNewline.`) : 'Aucun pour ce projet. Comme dans VS Code, un .vscode/settings.json à la racine du projet donne ses propres règles (tabulations, formatage à l\'enregistrement…).'),
+      h('div', { class: 'subtabs' }, h('button', { onclick: async () => {
+        if (!vs) {
+          const r = await api('/api/save', { method: 'POST', body: JSON.stringify({ path: vsPath, text: '{\n  "editor.tabSize": 2,\n  "editor.formatOnSave": false\n}\n', base: null, create: true }) })
+          if (!r.ok) return toast('⚠️ Impossible de créer .vscode/settings.json')
+        }
+        closeSettings()
+        openFile(vsPath)
+      } }, vs ? '✎ Ouvrir le fichier' : '＋ Créer .vscode/settings.json')))
   } else if (setTab === 'keys') {
     renderKeySettings(body)
   } else if (setTab === 'ide') {
@@ -2165,6 +2468,7 @@ async function refreshState() {
   const prev = new Set(srv.changes.map((c) => c.path))
   srv = await r.json()
   $('name').textContent = srv.name
+  renderPromptImgs()
   if (!prefsLoaded) {
     if (srv.prefs && typeof srv.prefs === 'object') {
       P = { ...P, ...srv.prefs, views: srv.prefs.views || {} }
@@ -2183,6 +2487,7 @@ async function refreshState() {
   renderIdeas()
   renderAnns()
   renderRuns()
+  renderAgents()
   renderDock()
   updatePromptHint()
   renderStatus()
@@ -2206,7 +2511,13 @@ async function refreshState() {
 let started = false
 function connect() {
   const es = new EventSource(`/events?t=${encodeURIComponent(T)}`)
-  es.onopen = () => { $('dot').classList.add('on'); $('dot').title = 'Connecté'; refreshState().then(loadRuns) }
+  let opened = false
+  es.onopen = () => {
+    $('dot').classList.add('on'); $('dot').title = 'Connecté'; refreshState().then(loadRuns)
+    // reconnectée (mod rechargée, serveur relancé) : la session a pu changer entre-temps
+    if (opened) { if (conv.loaded) fetchConv(true); if (sess.loaded) loadSessions() }
+    opened = true
+  }
   es.onerror = () => { $('dot').classList.remove('on'); $('dot').title = 'Déconnecté (session Claude fermée ?)' }
   es.onmessage = async (m) => {
     const ev = JSON.parse(m.data)
@@ -2217,6 +2528,10 @@ function connect() {
     if (ev.type === 'question') return onQuestion(ev)
     if (ev.type === 'questionClosed') { if (question && question.id === ev.id) { question = null; renderQuestion() } return }
     if (ev.type === 'convChanged') return convChanged()
+    if (ev.type === 'sessions') return onSessions(ev)
+    if (ev.type === 'agents') { srv.subagents = ev.list || []; renderAgents(); if (agentView.id) refreshAgentView(); return }
+    if (ev.type === 'agentMessages') return onAgentMessages(ev)
+    if (ev.type === 'session') return onSessionSwitch(ev)
     if (ev.type === 'dashboard') { dash.data = ev.data; if ($('dash').classList.contains('show')) renderDash(); return }
     if (ev.type === 'promptBack') { if (!promptEd.getValue().trim()) promptEd.setValue(ev.text || ''); return }
     if (ev.type === 'run') {
@@ -2242,6 +2557,7 @@ function connect() {
     }
     if (ev.type === 'status') {
       srv.status = ev.status
+      renderSessBar()
       return renderStatus()
     }
     if (ev.type === 'annotation') {
@@ -2259,6 +2575,8 @@ function connect() {
       $('activity').textContent = '✅ Claude a terminé · ' + fmtTime(Date.now())
       if (P.notify) notifyDone()
       if ($('dash').classList.contains('show')) event({ type: 'dashboard' })
+      // le titre de la session arrive au fil des prompts
+      if (sess.loaded) loadSessions()
       return
     }
     if (ev.type === 'restoreConflict') {
@@ -2277,7 +2595,7 @@ function connect() {
 }
 
 // ---------- conversation : l'onglet fixe 💬 ----------
-const conv = { items: [], first: '', total: 0, loaded: false, unread: false, follow: true, timer: null, nodes: new Map(), busyEl: null }
+const conv = { session: '', items: [], first: '', total: 0, loaded: false, unread: false, follow: true, timer: null, nodes: new Map(), busyEl: null }
 function openConv() {
   if (view.kind === 'file' && cur) rememberView()
   view = { kind: 'conv' }
@@ -2287,6 +2605,7 @@ function openConv() {
   renderTabs()
   renderConv()
   fetchConv(!conv.loaded)
+  if (!sess.loaded) loadSessions()
 }
 /** demande à la mod la conversation : tout, ou à partir des derniers messages (leurs outils ont pu recevoir leur résultat) */
 function fetchConv(all = false) {
@@ -2298,8 +2617,135 @@ function convChanged() {
   clearTimeout(conv.timer)
   conv.timer = setTimeout(() => fetchConv(), 300)
 }
+// ---------- la session : en changer, en ouvrir une nouvelle, modèle et effort ----------
+const sess = { list: [], current: '', models: [], efforts: ['low', 'medium', 'high', 'xhigh', 'max'], loaded: false }
+const MODEL_NAMES = { default: 'Par défaut', best: 'Le meilleur', sonnet: 'Sonnet', opus: 'Opus', haiku: 'Haiku', fable: 'Fable', 'sonnet[1m]': 'Sonnet (1M)', 'opus[1m]': 'Opus (1M)' }
+/** « claude-opus-5-5[1m] » -> « Opus 5.5 (1M) » */
+function prettyModel(id) {
+  if (!id) return '?'
+  const m = String(id).match(/claude-([a-z]+)-(\d+)(?:-(\d+))?/)
+  if (!m) return String(id)
+  return `${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}${m[3] && m[3].length < 3 ? '.' + m[3] : ''}${/\[1m\]/.test(id) ? ' (1M)' : ''}`
+}
+function sessLabel(x) { return x.title || x.prompt || (x.current ? 'Nouvelle conversation' : x.id.slice(0, 8)) }
+function whenOf(t) {
+  if (!t) return ''
+  const d = new Date(t), now = new Date()
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  if (d.toDateString() === now.toDateString()) return `aujourd'hui ${time}`
+  const y = new Date(now); y.setDate(now.getDate() - 1)
+  if (d.toDateString() === y.toDateString()) return `hier ${time}`
+  return d.toLocaleDateString([], { day: 'numeric', month: 'short' }) + ' ' + time
+}
+function loadSessions() { event({ type: 'sessions.load' }) }
+function onSessions(ev) {
+  sess.list = ev.sessions || []
+  sess.current = ev.current || ''
+  if (ev.models && ev.models.length) sess.models = ev.models
+  if (ev.efforts) sess.efforts = ev.efforts
+  if (ev.permissionModes) sess.permissionModes = ev.permissionModes
+  if ('permissionDefault' in ev) sess.permissionDefault = ev.permissionDefault
+  sess.loaded = true
+  renderSessBar()
+  if (!$('sessList').hidden) renderSessList()
+}
+const MODEL_FAMILIES = ['opus', 'sonnet', 'haiku', 'fable']
+const PERM_NAMES = { default: 'Demander', acceptEdits: 'Modifs acceptées', plan: 'Plan', auto: 'Auto', dontAsk: 'Sans demander', bypassPermissions: 'Tout permis' }
+function setModel(m) {
+  event({ type: 'model.set', value: m })
+  // affiché tout de suite ; la barre d'état confirme
+  srv.status = { ...(srv.status || {}), model: 'claude-' + m.replace(/\[1m\]$/, '') + (m.endsWith('[1m]') ? '[1m]' : '') }
+  renderSessBar()
+}
+function setEffort(x) {
+  event({ type: 'effort.set', value: x })
+  srv.status = { ...(srv.status || {}), effort: x }
+  renderSessBar()
+}
+function renderSessBar() {
+  const cur = sess.list.find((x) => x.current)
+  $('sessTitle').textContent = cur ? sessLabel(cur) : 'Session'
+  $('sessPick').title = (cur ? sessLabel(cur) + '\n\n' : '') + 'Changer de session : reprendre une conversation du projet, comme /resume'
+  const st = srv.status || {}
+  const model = String(st.model || '')
+  const family = MODEL_FAMILIES.find((f) => model.includes(f))
+  // les familles que /config propose, en boutons ; le reste (1M, par défaut…) dans le menu
+  const fams = MODEL_FAMILIES.filter((f) => !sess.models.length || sess.models.includes(f))
+  $('sessModel').replaceChildren(...fams.map((f) => h('button', {
+    class: f === family ? 'on' : '', title: f === family ? `En cours : ${prettyModel(model)}` : `Passer à ${MODEL_NAMES[f] || f}`,
+    onclick: () => { if (f !== family || /\[1m\]/.test(model)) setModel(f) },
+  }, MODEL_NAMES[f] || f)))
+  const more = $('sessModelMore')
+  if (document.activeElement !== more) {
+    const rest = sess.models.filter((m) => !fams.includes(m))
+    more.hidden = !rest.length
+    more.replaceChildren(h('option', { value: '' }, /\[1m\]/.test(model) ? prettyModel(model) : '…'), ...rest.map((m) => h('option', { value: m }, MODEL_NAMES[m] || m)))
+    more.value = ''
+  }
+  $('sessEffort').replaceChildren(...sess.efforts.map((x) => h('button', {
+    class: x === st.effort ? 'on' : '', title: x === st.effort ? 'Effort en cours' : `Passer à ${x}`,
+    onclick: () => { if (x !== st.effort) setEffort(x) },
+  }, x)))
+  // le mode de permission : lu en direct ; seule la bascule vers « plan » se fait d'ici
+  const mode = st.permissionMode
+  $('sessPerm').textContent = '🛡 ' + (mode ? PERM_NAMES[mode] || mode : '?')
+  $('sessPerm').title = mode ? `Mode de la session : ${mode}. Il se change avec Maj+Tab dans le terminal.` : 'Mode de la session : connu au premier prompt ou outil'
+  const plan = $('sessPlan')
+  plan.classList.toggle('on', mode === 'plan')
+  plan.title = mode === 'plan' ? 'Claude est en mode plan. Pour en sortir : accepte son plan, ou Maj+Tab dans le terminal.' : 'Passer en mode plan (/plan) : Claude prépare un plan sans rien modifier'
+  const def = $('sessPermDefault')
+  if (document.activeElement !== def) {
+    def.replaceChildren(h('option', { value: '' }, 'Nouvelles sessions : ' + (sess.permissionDefault ? PERM_NAMES[sess.permissionDefault] || sess.permissionDefault : '?')),
+      ...(sess.permissionModes || []).map((m) => h('option', { value: m }, PERM_NAMES[m] || m)))
+    def.value = ''
+  }
+}
+function renderSessList() {
+  const box = $('sessList')
+  if (!sess.loaded) return box.replaceChildren(h('div', { class: 'hint' }, 'Chargement des sessions…'))
+  if (!sess.list.length) return box.replaceChildren(h('div', { class: 'hint' }, 'Aucune session dans ce projet.'))
+  box.replaceChildren(
+    h('div', { class: 'hint' }, srv.busy ? 'Claude travaille : la session changera quand il aura fini.' : 'Un clic reprend la session, comme /resume. Celle en cours reste dans la liste.'),
+    ...sess.list.map((x) => h('div', {
+      class: 'sess' + (x.current ? ' cur' : ''),
+      title: (x.title ? x.title + '\n' : '') + (x.prompt || '') + `\n${x.id}`,
+      onclick: () => {
+        if (x.current) return
+        $('sessList').hidden = true
+        $('sessPick').classList.remove('on')
+        event({ type: 'session.resume', id: x.id })
+        toast(srv.busy ? '🗂 La session changera quand Claude aura fini' : `🗂 Reprise de « ${sessLabel(x).slice(0, 60)} »`)
+      },
+    }, h('span', { class: 'tt' }, (x.current ? '● ' : '') + sessLabel(x)), h('small', {}, whenOf(x.last)), h('small', {}, x.usd ? fmtUsd(x.usd) : ''))))
+}
+function toggleSessList(open = $('sessList').hidden) {
+  $('sessList').hidden = !open
+  $('sessPick').classList.toggle('on', open)
+  if (open) { renderSessList(); loadSessions() }
+}
+function newSession() {
+  event({ type: 'session.new' })
+  toast(srv.busy ? '＋ La nouvelle conversation s\'ouvrira quand Claude aura fini' : '＋ Nouvelle conversation')
+}
+
+/** /clear, /resume, ou une session changée depuis la page : la conversation d'avant est finie */
+function onSessionSwitch() {
+  setTimeout(loadSessions, 1500)
+  conv.items = []
+  conv.first = ''
+  conv.session = ''
+  conv.nodes = new Map()
+  conv.loaded = false
+  if (view.kind === 'conv') renderConv()
+  // Claude Code bascule sur la nouvelle session juste après : on lui laisse le temps
+  clearTimeout(conv.timer)
+  conv.timer = setTimeout(() => fetchConv(true), 600)
+}
 function onConversation(ev) {
   const items = ev.items || []
+  // une autre session (reprise, /clear) : tout recharger
+  if (ev.from > 0 && ev.session && conv.session && ev.session !== conv.session) return fetchConv(true)
+  if (ev.session) conv.session = ev.session
   // le début a changé (/clear, compactage) alors qu'on n'a reçu que la fin : on recharge tout
   if (ev.from > 0 && ev.first !== conv.first) return fetchConv(true)
   conv.items = ev.from === 0 ? items : [...conv.items.filter((x) => x.i < ev.from), ...items]
@@ -2317,7 +2763,8 @@ function onConversation(ev) {
 function md(text) {
   const el = h('div', { class: 'md' })
   if (!window.marked || !window.DOMPurify) { el.style.whiteSpace = 'pre-wrap'; el.textContent = text; return el }
-  el.innerHTML = DOMPurify.sanitize(marked.parse(text, { gfm: true }))
+  // breaks : un retour à la ligne simple reste un retour à la ligne, comme dans le terminal
+  el.innerHTML = DOMPurify.sanitize(marked.parse(mdLenient(text), { gfm: true, breaks: true }))
   for (const a of el.querySelectorAll('a')) { a.target = '_blank'; a.rel = 'noopener' }
   for (const c of el.querySelectorAll('pre code')) colorizeCode(c)
   for (const c of el.querySelectorAll(':not(pre) > code')) {
@@ -2329,6 +2776,31 @@ function md(text) {
     c.onclick = () => openFile(p, { line: m[2] ? Number(m[2]) : null })
   }
   return el
+}
+/**
+ * Le terminal de Claude Code est plus souple que CommonMark : une liste collée à un paragraphe
+ * (surtout numérotée à partir de 4, qui ne peut pas couper un paragraphe en CommonMark) y reste une
+ * liste. On ajoute la ligne vide qui manque, hors des blocs de code et à l'intérieur d'une liste non.
+ */
+function mdLenient(text) {
+  const ITEM = /^ {0,3}(?:\d{1,9}[.)]|[-*+])\s+\S/
+  const lines = text.split('\n')
+  const out = []
+  let fence = null
+  let inList = false
+  for (const line of lines) {
+    const f = line.match(/^ {0,3}(`{3,}|~{3,})/)
+    if (fence) { if (f && f[1][0] === fence[0] && f[1].length >= fence.length) fence = null; out.push(line); continue }
+    if (f) { fence = f[1]; inList = false; out.push(line); continue }
+    if (!line.trim()) { inList = false; out.push(line); continue }
+    if (ITEM.test(line)) {
+      const prev = out[out.length - 1]
+      if (!inList && prev !== undefined && prev.trim() && !/^ {0,3}(#|>|\||[-*_]{3,}\s*$)/.test(prev)) out.push('')
+      inList = true
+    }
+    out.push(line)
+  }
+  return out.join('\n')
 }
 function colorizeCode(el) {
   const m = (el.className || '').match(/language-([\w+-]+)/)
@@ -2359,6 +2831,7 @@ function convNode(x, prevRole) {
   if (x.role === 'user') {
     if (x.kind === 'summary') return h('div', { class: 'msg user' }, h('details', { class: 'sum' }, h('summary', {}, '📦 Résumé du compactage de la conversation'), md(x.text)))
     if (x.kind === 'command') return h('div', { class: 'msg user cmd' }, h('div', { class: 'bubble' }, x.text))
+    if (x.kind === 'notice') return h('div', { class: 'msg notice' }, x.text)
     return h('div', { class: 'msg user' }, h('div', { class: 'who' }, 'Toi'), h('div', { class: 'bubble' }, x.text))
   }
   return h('div', { class: 'msg ai' + (prevRole === 'assistant' ? ' cont' : '') },
@@ -2370,7 +2843,8 @@ function convNode(x, prevRole) {
       return a ? h('div', { class: 'artInline' }, '🖼 ', h('b', {}, a.title), ...artLinks(a)) : null
     }),
     x.tools ? h('div', { class: 'tools' }, x.tools.map((t) => h('details', { class: 'tool' + (t.isError ? ' err' : '') },
-      h('summary', { title: t.label }, (t.isError ? '❌ ' : '') + t.label),
+      h('summary', { title: t.label }, (t.isError ? '❌ ' : '') + t.label,
+        t.agentId ? h('a', { class: 'toolAgent', title: 'Voir ce que fait ce sous-agent', onclick: (e) => { e.preventDefault(); e.stopPropagation(); openAgent(t.agentId) } }, '🤖 voir l\'agent') : null),
       t.out ? h('pre', {}, t.out) : h('pre', {}, t.isError ? 'Erreur' : '…')))) : null)
 }
 function renderConv() {
@@ -2399,7 +2873,8 @@ function renderConv() {
 function renderConvBusy() {
   if (!conv.busyEl) return
   conv.busyEl.hidden = !srv.busy
-  conv.busyEl.replaceChildren(h('span', { class: 'spin' }, '◐'), ' Claude travaille…')
+  conv.busyEl.replaceChildren(h('span', { class: 'spin' }, '◐'), ' Claude travaille…',
+    h('button', { class: 'stop', title: 'Arrêter Claude, comme Échap dans le terminal', onclick: stopClaude }, '⏹ Arrêter'))
 }
 function convToEnd() { const l = $('convList'); l.scrollTop = l.scrollHeight }
 const CONV_FONT = [11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 28, 32]
@@ -2775,6 +3250,7 @@ require(['vs/editor/editor.main'], async () => {
   editor = monaco.editor.create($('ed'), common)
   diff = monaco.editor.createDiffEditor($('diff'), { ...common, originalEditable: false, readOnly: false, renderMarginRevertIcon: false, renderSideBySide: false, useInlineViewWhenSpaceIsLimited: false })
   diff.onDidUpdateDiff(() => renderZones())
+  setupCodeIntel()
 
   // actions communes aux deux éditeurs
   const both = [editor, diff.getModifiedEditor()]
@@ -2854,6 +3330,27 @@ require(['vs/editor/editor.main'], async () => {
     fixedOverflowWidgets: true,
   })
   const promptModel = promptEd.getModel()
+  // une image collée ou glissée dans le prompt : enregistrée par le serveur, mentionnée en @chemin
+  const imagesOf = (dt) => [...((dt && dt.files) || [])].filter((f) => f.type.startsWith('image/'))
+  $('promptEd').addEventListener('paste', (e) => {
+    const files = imagesOf(e.clipboardData)
+    if (!files.length) return
+    e.preventDefault(); e.stopPropagation()
+    for (const f of files) attachImage(f)
+  }, true)
+  $('promptEd').addEventListener('dragover', (e) => {
+    if (![...(e.dataTransfer?.items || [])].some((i) => i.kind === 'file')) return
+    e.preventDefault(); $('promptEd').classList.add('dropping')
+  }, true)
+  $('promptEd').addEventListener('dragleave', () => $('promptEd').classList.remove('dropping'), true)
+  $('promptEd').addEventListener('drop', (e) => {
+    $('promptEd').classList.remove('dropping')
+    const files = imagesOf(e.dataTransfer)
+    if (!files.length) return
+    e.preventDefault(); e.stopPropagation()
+    for (const f of files) attachImage(f)
+  }, true)
+  promptModel.onDidChangeContent(() => renderPromptImgs())
   promptEd.onDidFocusEditorWidget(() => $('promptEd').classList.add('focus'))
   promptEd.onDidBlurEditorWidget(() => $('promptEd').classList.remove('focus'))
   promptEd.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => sendPrompt())
@@ -2941,6 +3438,26 @@ require(['vs/editor/editor.main'], async () => {
   $('statusline').onclick = () => openSettings('ide')
   $('plan').addEventListener('toggle', () => { if (P.planOpen !== $('plan').open) { P.planOpen = $('plan').open; savePrefs() } })
   $('promptSend').onclick = () => sendPrompt()
+  $('promptStop').onclick = stopClaude
+  $('sessPick').onclick = () => toggleSessList()
+  $('agentClose').onclick = closeAgent
+  $('agentRefresh').onclick = () => agentView.id && event({ type: 'agent.messages', id: agentView.id })
+  $('agentModal').addEventListener('click', (e) => { if (e.target === $('agentModal')) closeAgent() })
+  $('sessNew').onclick = newSession
+  $('sessModelMore').onchange = (e) => { const v = e.target.value; e.target.blur(); if (v) setModel(v) }
+  $('sessPlan').onclick = () => {
+    if ((srv.status || {}).permissionMode === 'plan') return toast('Pour sortir du mode plan : accepte le plan de Claude, ou Maj+Tab dans le terminal')
+    event({ type: 'plan.enter' })
+    toast(srv.busy ? '📋 Le mode plan s\'activera quand Claude aura fini' : '📋 Mode plan')
+  }
+  $('sessPermDefault').onchange = (e) => {
+    const v = e.target.value
+    e.target.blur()
+    if (!v) return
+    event({ type: 'permission.default', value: v })
+    sess.permissionDefault = v
+    renderSessBar()
+  }
   $('promptCli').onclick = () => promptToCli()
   // hauteur de la zone de prompt
   $('dockSplit').addEventListener('mousedown', (e) => {

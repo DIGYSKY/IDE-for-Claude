@@ -1,8 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Annotation, Change, HistFile, Idea, Mode, OpenFile, PlanItem, Project, Queued, ReviewItem, SavedCommand, Status, Turn } from '../types'
-import { conversation, dashboard } from './insights'
+import type { Annotation, Change, HistFile, Idea, Mode, OpenFile, PlanItem, Project, Queued, ReviewItem, SavedCommand, Status, SubAgent, Turn } from '../types'
+import { agentConversation, conversation, dashboard, projectSessions } from './insights'
 import { cutToks, langOf, start, tokenize } from './syntax'
 import type { Kind, Tok } from './syntax'
 
@@ -31,6 +31,7 @@ const planAtom = atom({ plugin: 'ide-for-claude', key: 'plan' } as const, [] as 
 /** Claude travaille sur un prompt : les prompts envoyés depuis la page attendent dans la file */
 const busyAtom = atom({ plugin: 'ide-for-claude', key: 'busy' } as const, false, { shape: 'busy-1' })
 const statusAtom = atom({ plugin: 'ide-for-claude', key: 'status' } as const, null as Status | null, { shape: 'status-1' })
+const subagentsAtom = atom({ plugin: 'ide-for-claude', key: 'subagents' } as const, [] as SubAgent[], { shape: 'subagents-1' })
 const paneClosedAtom = atom({ plugin: 'ide-for-claude', key: 'paneClosed' } as const, false, { shape: 'paneClosed-1' })
 
 const historyAtom = atom({ plugin: 'ide-for-claude', key: 'history' } as const, [] as Turn[], { shape: 'history-1' })
@@ -196,7 +197,7 @@ async function recordChange($: $, path: string, prior: string | null, after: str
   if (file?.path === path && !isDirty) await update($, fileAtom, () => ({ path, saved: after, draft: after }))
   else if (file?.path === path) await update($, noticeAtom, () => '⚠️ Claude a modifié ce fichier pendant que tu l’éditais')
   else if (!isDirty) await openFile($, path)
-  if (!(await read($, webAtom)) && !(await read($, paneClosedAtom)) && (await ideSettings($)).autoOpenPane)
+  if (!(await webOf($)) && !(await read($, paneClosedAtom)) && (await ideSettings($)).autoOpenPane)
     void $.ui.open({ id: PANE, title: TITLE })
 }
 
@@ -569,8 +570,11 @@ async function endSession($: $, sessionId: string, reason: string) {
   await update($, queueAtom, () => [])
   await update($, planAtom, () => [])
   await update($, busyAtom, () => false)
+  await update($, subagentsAtom, () => [])
   await update($, restoredForAtom, () => null)
   void pushChanges($).catch(() => undefined)
+  // la page recharge la conversation : celle d'avant est finie
+  void notify($, { type: 'session', reason })
 }
 
 /** Les historiques de plus de 30 jours sont effacés. */
@@ -790,6 +794,8 @@ async function refreshStatus($: $, force = false) {
       window: usage?.context.window,
       percent: usage?.context.percent,
       usd: usage?.cost?.usd,
+      effort: await currentEffort($),
+      ...(permissionMode ? { permissionMode } : {}),
       at: Date.now(),
       ...(head && head.exitCode === 0 ? { branch: head.stdout.trim() } : {}),
     }
@@ -818,6 +824,17 @@ function modelName(id: string | undefined) {
  */
 /** L'effort de la dernière requête du fil principal : celui qu'affiche la barre d'état de Claude Code. */
 let lastEffort: string | undefined
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
+/** le mode de permission de la session, tel que Claude Code le donne à ses hooks (Maj+Tab le change) */
+let permissionMode: string | undefined
+const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk']
+
+/** Retient le mode de permission que porte un événement classique ; la page est prévenue s'il change. */
+async function notePermissionMode($: $, e: { permission_mode?: string; agent_id?: string }) {
+  if (e.agent_id || !e.permission_mode || e.permission_mode === permissionMode) return
+  permissionMode = e.permission_mode
+  void refreshStatus($, true)
+}
 
 /** l'effort du dernier tour, sinon celui demandé par l'environnement ou les réglages */
 async function currentEffort($: $): Promise<string | undefined> {
@@ -895,20 +912,29 @@ async function ideaMentions($: $, raw: string) {
 const markIdeasDoing = ($: $, ids: string[]) =>
   ids.length ? changeProject($, p => ({ ...p, ideas: p.ideas.map(i => (ids.includes(i.id) && i.status === 'new' ? { ...i, status: 'doing' } : i)) })) : Promise.resolve()
 
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp)$/i
+
 async function expandMentions($: $, raw: string) {
   const cwd = await $.session.cwd()
   const context: string[] = []
   const usedIdeas: string[] = []
   const files: string[] = []
+  const images: string[] = []
   for (const m of raw.matchAll(/(^|\s)@([^\s:]+)(?::(\d+)(?:-(\d+))?)?/g)) {
     const path = absOf(cwd, m[2]!)
     if (!(await $.fs.exists(path).catch(() => false))) continue
+    // une image collée dans la page : Claude la regarde avec son outil Read
+    if (IMAGE_EXT.test(path)) {
+      if (!images.includes(path)) images.push(path)
+      continue
+    }
     const a = m[3] ? Number(m[3]) : 0
     const b = a ? Math.max(a, Number(m[4] ?? m[3])) : 0
     const where = `${relTo(cwd, path)}${a ? (b > a ? `, lignes ${a}-${b}` : `, ligne ${a}`) : ''}`
     if (!files.includes(where)) files.push(where)
   }
   if (files.length) context.push(`Fichiers mentionnés (lis-les si besoin) :\n${files.map(f => `- ${f}`).join('\n')}`)
+  if (images.length) context.push(`Images jointes (ouvre-les avec Read pour les voir) :\n${images.map(f => `- ${f}`).join('\n')}`)
   const ideas = await ideaMentions($, raw)
   context.push(...ideas.context)
   usedIdeas.push(...ideas.usedIdeas)
@@ -1044,6 +1070,21 @@ let server: Promise<string> | null = null
 let ready = false
 /** dernier échec de démarrage : on ne relance pas le serveur à chaque appel d'outil s'il ne démarre pas */
 let failedAt = 0
+/** le port et la clé du serveur de cette copie : un `/clear` ou une reprise vide `webAtom` (nouvel id de session) */
+let webLive: { port: number; token: string } | null = null
+/** le tour de Claude en cours (boucle principale), pour l'arrêter depuis la page */
+let mainTurn: string | null = null
+
+/**
+ * La page web de la session, s'il y en a une. Après un `/clear` ou une reprise, l'état de la
+ * session repart à vide alors que le serveur tourne toujours : on le lui rattache.
+ */
+async function webOf($: $): Promise<{ port: number; token: string } | null> {
+  const web = await read($, webAtom)
+  if (web || !webLive || !server) return web
+  await update($, webAtom, () => webLive)
+  return webLive
+}
 
 const randomToken = () => {
   const bytes = new Uint8Array(24)
@@ -1052,7 +1093,7 @@ const randomToken = () => {
 }
 
 async function post($: $, route: string, payload: unknown) {
-  const web = await read($, webAtom)
+  const web = await webOf($)
   if (!web) return
   if (!server) {
     // la copie a changé : on reprend la main ; une fois prêt, le serveur reçoit tout l'état
@@ -1071,7 +1112,7 @@ async function post($: $, route: string, payload: unknown) {
 
 /** Une requête au serveur de la page dont on lit la réponse ; null si la page n'est pas là. */
 async function askServer($: $, route: string, payload?: unknown): Promise<Record<string, unknown> | null> {
-  const web = await read($, webAtom)
+  const web = await webOf($)
   if (!web || !server || !ready) return null
   const r = await $.http
     .fetch(`http://127.0.0.1:${web.port}${route}`, {
@@ -1090,7 +1131,7 @@ async function askServer($: $, route: string, payload?: unknown): Promise<Record
 
 /** Envoie au serveur tout l'état de la session : la page se met à jour en direct. */
 async function pushChanges($: $) {
-  if (!(await read($, webAtom))) return
+  if (!(await webOf($))) return
   const cwd = await $.session.cwd()
   await post($, '/api/push', {
     changes: (await read($, changesAtom)).map(c => ({ path: c.path, before: c.before, agent: c.agent })),
@@ -1103,6 +1144,7 @@ async function pushChanges($: $) {
     plan: await read($, planAtom),
     busy: await read($, busyAtom),
     status: await read($, statusAtom),
+    subagents: await read($, subagentsAtom),
     ide: await ideSettings($),
     editor: await editorSettings($),
     commands: await slashCommands($),
@@ -1239,6 +1281,22 @@ async function onWebEvent($: $, ev: WebEvent) {
         await notify($, { type: 'toast', text: `⏳ En file d'attente : il partira quand Claude aura fini` })
       } else await submitPrompt($, ev.text)
       break
+    case 'interrupt': {
+      // ⏹ dans la page : comme Échap dans le terminal
+      const turnId = mainTurn
+      if (!turnId) {
+        await update($, busyAtom, () => false)
+        await notify($, { type: 'toast', text: 'Claude ne travaille pas en ce moment' })
+        break
+      }
+      try {
+        await $.turn.abort({ turnId })
+        await notify($, { type: 'toast', text: '⏹ Claude est arrêté' })
+      } catch (err) {
+        await notify($, { type: 'toast', text: `⚠️ Impossible d'arrêter Claude : ${String((err as Error)?.message ?? err)}` })
+      }
+      break
+    }
     case 'queue.remove':
       await update($, queueAtom, q => q.filter(x => x.id !== ev.id))
       break
@@ -1254,6 +1312,73 @@ async function onWebEvent($: $, ev: WebEvent) {
     case 'conversation':
       await notify($, { type: 'conversation', ...(await conversation($, typeof ev.from === 'number' ? ev.from : 0)) })
       break
+    // --- la session : en changer, en ouvrir une nouvelle, modèle et effort ---
+    case 'agent.messages': {
+      const id = String(ev.id ?? '')
+      if (!id) break
+      await notify($, { type: 'agentMessages', ...(await agentConversation($, id)) })
+      break
+    }
+    case 'sessions.load': {
+      // les modèles proposés et le mode par défaut, comme les lignes de /config
+      const rows = await $.config.list().catch(() => [])
+      const row = rows.find(r => r.key === 'model') as { value?: unknown; options?: unknown } | undefined
+      const models = Array.isArray(row?.options) ? row.options.map(String) : []
+      const permRow = rows.find(r => r.key === 'permissionMode') as { value?: unknown } | undefined
+      await notify($, {
+        type: 'sessions',
+        ...(await projectSessions($)),
+        models,
+        modelSetting: row?.value ?? null,
+        efforts: EFFORTS,
+        permissionModes: PERMISSION_MODES,
+        permissionDefault: permRow?.value ?? null,
+      })
+      // le modèle et l'effort en cours, même avant le premier prompt
+      await refreshStatus($, true)
+      break
+    }
+    case 'session.new':
+      // comme /clear dans le terminal : la conversation d'avant reste dans la liste, on peut la reprendre
+      await $.command.run({ command: 'clear', args: '' })
+      break
+    case 'session.resume': {
+      const id = String(ev.id ?? '')
+      if (!/^[\w-]{8,}$/.test(id)) break
+      if (id === (await $.session.id().catch(() => ''))) break
+      await $.command.run({ command: 'resume', args: id })
+      break
+    }
+    case 'model.set': {
+      const value = String(ev.value ?? '')
+      const { deny } = (await $.config.set({ key: 'model', value: value as never }).catch((err: unknown) => ({ deny: String((err as Error)?.message ?? err) }))) as { deny?: string }
+      await notify($, { type: 'toast', text: deny ? `⚠️ Modèle : ${deny}` : `🧠 Modèle : ${value}` })
+      await refreshStatus($, true)
+      break
+    }
+    case 'plan.enter':
+      // le mode plan : la seule bascule de permission qu'une commande sait faire (en sortir : Maj+Tab ou le plan accepté)
+      await $.command.run({ command: 'plan', args: '' })
+      // Claude Code ne le redira qu'au prochain prompt ou outil : la page le sait tout de suite
+      permissionMode = 'plan'
+      await refreshStatus($, true)
+      break
+    case 'permission.default': {
+      // le mode des NOUVELLES sessions : Claude Code ne laisse pas une mod changer celui de la session en cours
+      const value = String(ev.value ?? '')
+      if (!PERMISSION_MODES.includes(value)) break
+      const { deny } = (await $.config.set({ key: 'permissionMode', value: value as never }).catch((err: unknown) => ({ deny: String((err as Error)?.message ?? err) }))) as { deny?: string }
+      await notify($, { type: 'toast', text: deny ? `⚠️ Mode par défaut : ${deny}` : `🛡 Nouvelles sessions : ${value}` })
+      break
+    }
+    case 'effort.set': {
+      const level = String(ev.value ?? '')
+      if (!EFFORTS.includes(level)) break
+      await $.command.run({ command: 'effort', args: level })
+      lastEffort = level
+      await refreshStatus($, true)
+      break
+    }
     case 'dashboard': {
       const ide = await ideSettings($)
       const data = await dashboard($, {
@@ -1386,11 +1511,12 @@ async function onWebEvent($: $, ev: WebEvent) {
 
 /** Démarre le serveur de cette session s'il ne tourne pas, et rend son adresse. */
 function startWeb($: $): Promise<string> {
-  if (server) return server
+  // déjà lancé (peut-être avant un /clear) : on rattache la page à la session en cours
+  if (server) return server.then(async url => (await webOf($), url))
   ready = false
   server = (async () => {
     const cwd = await $.session.cwd()
-    const prev = await read($, webAtom)
+    const prev = await webOf($)
     const token = prev?.token ?? randomToken()
     const argv = ['node', `${$.plugin.root}/server/server.mjs`, '--root', cwd, '--token', token]
     // les journaux de l'exécuteur de commandes, à côté des données de la mod (sinon le dossier temporaire)
@@ -1442,7 +1568,8 @@ function startWeb($: $): Promise<string> {
       ready = false
     })()
     const p = await port
-    await update($, webAtom, () => ({ port: p, token }))
+    webLive = { port: p, token }
+    await update($, webAtom, () => webLive)
     ready = true
     await pushChanges($)
     const url = `http://127.0.0.1:${p}/?t=${token}`
@@ -1517,6 +1644,30 @@ async function openWeb($: $): Promise<string> {
   }
 }
 
+// ---------- sous-agents : suivis en direct dans la page ----------
+const MAX_AGENTS = 60
+
+/** Met à jour la fiche d'un sous-agent (créée au besoin) et prévient la page. */
+async function trackAgent($: $, id: string, fn: (a: SubAgent) => SubAgent) {
+  await update($, subagentsAtom, list => {
+    const old = list.find(a => a.id === id) ?? { id, description: '', type: '', status: 'running' as const, start: Date.now(), tools: 0 }
+    return [...list.filter(a => a.id !== id), fn(old)].slice(-MAX_AGENTS)
+  })
+  if (await webOf($)) void notify($, { type: 'agents', list: await read($, subagentsAtom) })
+}
+
+/** La tâche, le type et le parent d'un agent, tels que Claude Code les connaît. */
+async function agentInfo($: $, id: string) {
+  const info = (await $.agent.list().catch(() => [])).find(a => a.id === id)
+  if (!info) return {}
+  return {
+    ...(info.description ? { description: info.description } : {}),
+    ...(info.type ? { type: info.type } : {}),
+    ...(info.name ? { name: info.name } : {}),
+    ...(info.parentId ? { parent: info.parentId } : {}),
+  }
+}
+
 // ---------- activité de Claude, en direct dans la page ----------
 function activityLabel(cwd: string, e: { tool: string } & Record<string, unknown>): string {
   const p = typeof e.file_path === 'string' ? relTo(cwd, e.file_path) : typeof e.path === 'string' ? relTo(cwd, e.path) : ''
@@ -1556,7 +1707,7 @@ export const register: Register = on => {
     await getProject($).catch(() => null)
     void pruneSessions($).catch(() => undefined)
     // après un rechargement de la mod, on relance le serveur sur le même port : la page ouverte se reconnecte
-    if (await read($, webAtom)) void startWeb($).catch(() => undefined)
+    if (await webOf($)) void startWeb($).catch(() => undefined)
     return next(e)
   })
 
@@ -1624,6 +1775,16 @@ export const register: Register = on => {
   // fermé à la croix, par Échap ou par « Quitter » : on ne le rouvre plus tout seul
   on('ui.close', async ($, e, next) => {
     if (e.id === PANE && e.origin.kind !== 'unload') await update($, paneClosedAtom, () => true)
+    return next(e)
+  })
+
+  // le mode de permission en cours (Maj+Tab dans le terminal), lu au passage d'un prompt ou d'un outil
+  on('classic.UserPromptSubmit', async ($, e, next) => {
+    await notePermissionMode($, e as unknown as { permission_mode?: string; agent_id?: string }).catch(() => undefined)
+    return next(e)
+  })
+  on('classic.PreToolUse', async ($, e, next) => {
+    await notePermissionMode($, e as unknown as { permission_mode?: string; agent_id?: string }).catch(() => undefined)
     return next(e)
   })
 
@@ -1732,7 +1893,19 @@ export const register: Register = on => {
 
   // activité en direct, et fin de tour pour la notification
   on('tool.call', async ($, e, next) => {
-    if (!(await read($, webAtom))) return next(e)
+    if (e.agentId !== undefined) {
+      const id = e.agentId
+      const input = e as unknown as { tool: string } & Record<string, unknown>
+      // SubagentHandback : l'agent rend son rapport, ce n'est pas une action de plus
+      if (input.tool === 'SubagentHandback') {
+        const message = typeof input.message === 'string' ? input.message : ''
+        if (message) await trackAgent($, id, a => ({ ...a, answer: message.slice(0, 400) })).catch(() => undefined)
+      } else {
+        const label = activityLabel(await $.session.cwd(), input)
+        await trackAgent($, id, a => ({ ...a, tools: a.tools + 1, last: label })).catch(() => undefined)
+      }
+    }
+    if (!(await webOf($))) return next(e)
     const cwd = await $.session.cwd()
     void notify($, { type: 'activity', label: activityLabel(cwd, e as unknown as { tool: string } & Record<string, unknown>) })
     try {
@@ -1752,23 +1925,40 @@ export const register: Register = on => {
 
   // le prompt de la personne entre dans la conversation
   on('turn.start', async ($, e, next) => {
+    if (e.agentId === undefined) mainTurn = e.turnId
     const r = await next(e)
-    if (e.agentId === undefined && (await read($, webAtom))) void notify($, { type: 'convChanged' })
+    if (e.agentId !== undefined) {
+      const id = e.agentId
+      const info = await agentInfo($, id)
+      // un agent relancé (SendMessage) repart : plus de fin ni de réponse
+      await trackAgent($, id, ({ end: _end, answer: _answer, ...a }) => ({ ...a, ...info, status: 'running' }))
+    }
+    if (e.agentId === undefined && (await webOf($))) void notify($, { type: 'convChanged' })
     return r
   })
 
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
+    if (e.agentId !== undefined) {
+      const status = e.reason === 'answer' ? 'done' : e.reason === 'aborted' ? 'stopped' : 'failed'
+      const text = typeof done?.text === 'string' ? done.text.trim() : ''
+      await trackAgent($, e.agentId, a => ({ ...a, status, end: Date.now(), ...(text && !a.answer ? { answer: text.slice(0, 400) } : {}) }))
+    }
     if (e.agentId === undefined) {
+      if (mainTurn === e.turnId) mainTurn = null
       await update($, busyAtom, () => false)
       await persist($)
-      if (await read($, webAtom)) {
+      if (await webOf($)) {
         void notify($, { type: 'done' })
         void notify($, { type: 'convChanged' })
         void refreshStatus($, true)
       }
-      // pas d'attente ici : le prompt suivant ne part qu'une fois ce tour fini
-      void drainQueue($).catch(() => undefined)
+      // pas d'attente ici : le prompt suivant ne part qu'une fois ce tour fini.
+      // Interrompu (⏹ dans la page, Échap dans le terminal) : la file attend qu'on la relance.
+      if (e.reason === 'aborted') {
+        if ((await read($, queueAtom)).length && (await webOf($)))
+          void notify($, { type: 'toast', text: '⏹ Claude est arrêté : la file d’attente attend, « Envoyer maintenant » la relance' })
+      } else void drainQueue($).catch(() => undefined)
     }
     return done
   })

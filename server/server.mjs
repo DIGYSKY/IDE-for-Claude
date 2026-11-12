@@ -44,7 +44,7 @@ let accepted = []
 let prefs = null
 /** le reste de l'état de la session (idées, annotations, commandes, file, plan, barre d'état, réglages) */
 let extra = {}
-const EXTRA = ['project', 'queue', 'plan', 'busy', 'status', 'ide', 'editor', 'commands']
+const EXTRA = ['project', 'queue', 'plan', 'busy', 'status', 'subagents', 'ide', 'editor', 'commands']
 
 const clients = new Set()
 let noClientSince = Date.now()
@@ -238,6 +238,20 @@ const MAX_OUT = 1_000_000
 // la sortie complète de chaque lancement va dans un journal : Claude le lit lui-même quand on le joint
 const LOGS = args.logs || path.join(os.tmpdir(), 'ide-for-claude-runs')
 const MAX_LOG = 50_000_000
+// les images collées dans le prompt : à côté des journaux, Claude les lit avec son outil Read
+const IMAGES = args.logs ? path.join(path.dirname(LOGS), 'images') : path.join(os.tmpdir(), 'ide-for-claude-images')
+const IMAGE_TYPES = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' }
+const MAX_IMAGE = 15_000_000
+// les images de plus de 30 jours sont effacées, comme les historiques de session
+const pruneImages = async () => {
+  const old = Date.now() - 30 * 86_400_000
+  for (const name of await fs.readdir(IMAGES).catch(() => [])) {
+    const file = path.join(IMAGES, name)
+    const st = await fs.stat(file).catch(() => null)
+    if (st?.isFile() && st.mtimeMs < old) await fs.rm(file).catch(() => undefined)
+  }
+}
+void pruneImages()
 const MAX_RUNS = 30
 /** id -> { id, name, command, started, ended, code, out, child } */
 const runs = new Map()
@@ -357,6 +371,66 @@ const stopAll = () => {
   for (const r of runs.values()) stopRun(r)
 }
 
+// ---------- les réglages VS Code du projet (.vscode/settings.json) ----------
+/** JSON avec commentaires et virgules finales, comme VS Code l'accepte */
+function parseJsonc(text) {
+  let out = ''
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (c === '"') {
+      let j = i + 1
+      while (j < text.length && text[j] !== '"') j += text[j] === '\\' ? 2 : 1
+      out += text.slice(i, j + 1)
+      i = j
+    } else if (c === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') i++
+      out += '\n'
+    } else if (c === '/' && text[i + 1] === '*') {
+      i = text.indexOf('*/', i + 2)
+      if (i < 0) break
+      i++
+    } else out += c
+  }
+  return JSON.parse(out.replace(/,(\s*[}\]])/g, '$1'))
+}
+const VSCODE = path.join(ROOT, '.vscode', 'settings.json')
+// modifié à la main ou par Claude : la page relit l'état, donc les réglages
+watchFile(VSCODE, { interval: 1000 }, (cur, prev) => {
+  if (cur.mtimeMs !== prev.mtimeMs) send({ type: 'state' })
+})
+async function vscodeSettings() {
+  const text = await fs.readFile(VSCODE, 'utf8').catch(() => null)
+  if (text === null) return null
+  try {
+    const v = parseJsonc(text)
+    return { path: VSCODE, settings: v && typeof v === 'object' && !Array.isArray(v) ? v : {} }
+  } catch (err) {
+    return { path: VSCODE, settings: {}, error: String(err.message || err) }
+  }
+}
+
+// ---------- formatage : le Prettier du projet, s'il en a un ----------
+async function prettierOf() {
+  const bin = path.join(ROOT, 'node_modules', '.bin', process.platform === 'win32' ? 'prettier.cmd' : 'prettier')
+  return (await fs.stat(bin).catch(() => null)) ? bin : null
+}
+function formatWith(bin, file, text) {
+  return new Promise((resolve) => {
+    const child = spawn(bin, ['--stdin-filepath', file], { cwd: ROOT, shell: process.platform === 'win32' })
+    let out = ''
+    let err = ''
+    const timer = setTimeout(() => child.kill('SIGTERM'), 15_000)
+    child.stdout.on('data', (d) => (out += d))
+    child.stderr.on('data', (d) => (err += d))
+    child.on('error', (e) => { clearTimeout(timer); resolve({ error: String(e.message || e) }) })
+    child.on('close', (code) => {
+      clearTimeout(timer)
+      resolve(code === 0 ? { text: out } : { error: err.trim().split('\n')[0] || `code ${code}` })
+    })
+    child.stdin.end(text)
+  })
+}
+
 // ---------- serveur ----------
 let PORT = 0
 
@@ -379,6 +453,8 @@ const server = http.createServer(async (req, res) => {
     if (route === 'GET /api/state')
       return json(res, 200, {
         root: ROOT,
+        images: IMAGES,
+        vscode: await vscodeSettings(),
         name: NAME,
         sep: path.sep,
         changes: [...changes.keys()].map((p) => ({ path: p, rel: rel(p), agent: agents.get(p) ?? null })),
@@ -438,6 +514,23 @@ const server = http.createServer(async (req, res) => {
 
     if (route === 'GET /api/files') return json(res, 200, { files: (await allFiles()).map((p) => ({ path: p, rel: rel(p) })) })
 
+    // les sources TypeScript et JavaScript du projet, pour « aller à la définition » d'un fichier à l'autre
+    if (route === 'GET /api/sources') {
+      const out = []
+      let total = 0
+      for (const file of await allFiles()) {
+        if (!/\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(file) || /\.min\.js$/.test(file)) continue
+        const st = await fs.stat(file).catch(() => null)
+        if (!st || st.size > 300_000) continue
+        if (out.length >= 800 || total + st.size > 8_000_000) break
+        const text = await fs.readFile(file, 'utf8').catch(() => null)
+        if (text === null) continue
+        total += st.size
+        out.push({ path: file, text })
+      }
+      return json(res, 200, { sources: out })
+    }
+
     if (route === 'GET /api/search') {
       const text = q('q') ?? ''
       if (text.length < 2) return json(res, 200, { results: [] })
@@ -447,7 +540,17 @@ const server = http.createServer(async (req, res) => {
     if (route === 'GET /api/git') return json(res, 200, await gitStatus())
 
     if (route === 'POST /api/save') {
-      const { path: p, text, base, force, kind, info } = await body(req)
+      const { path: p, text, base, force, kind, info, create } = await body(req)
+      // un nouveau fichier du projet (.vscode/settings.json depuis ⚙️) : jamais par-dessus un existant
+      if (create && typeof p === 'string' && typeof text === 'string' && path.isAbsolute(p) && isInside(path.normalize(p))) {
+        const target = path.normalize(p)
+        if (await fs.stat(target).catch(() => null)) return json(res, 409, { error: 'existe déjà' })
+        await fs.mkdir(path.dirname(target), { recursive: true })
+        await fs.writeFile(target, text, { encoding: 'utf8', flag: 'wx' })
+        filesCache.at = 0
+        send({ type: 'state' })
+        return json(res, 200, { ok: true })
+      }
       const file = await allowed(p)
       if (!file) return json(res, 403, { error: 'refusé' })
       const now = await readText(file).catch(() => null)
@@ -469,6 +572,43 @@ const server = http.createServer(async (req, res) => {
     }
 
     // une action de la page pour la mod : commentaire, acceptation, préférences...
+    // formater un fichier : avec le Prettier du projet ; sinon la page utilise le formateur de Monaco
+    if (route === 'POST /api/format') {
+      const b = await body(req)
+      const file = await allowed(b.path)
+      if (!file || typeof b.text !== 'string') return json(res, 400, { error: 'fichier refusé' })
+      const bin = await prettierOf()
+      if (!bin) return json(res, 200, { text: null })
+      const r = await formatWith(bin, file, b.text)
+      return json(res, 200, r.error ? { text: null, error: r.error, by: 'prettier' } : { text: r.text, by: 'prettier' })
+    }
+
+    // une image collée ou déposée dans le prompt
+    if (route === 'POST /api/image') {
+      const b = await body(req)
+      const ext = IMAGE_TYPES[b.type]
+      if (!ext || typeof b.data !== 'string') return json(res, 415, { error: 'format refusé : PNG, JPEG, GIF ou WebP' })
+      const bytes = Buffer.from(b.data, 'base64')
+      if (!bytes.length || bytes.length > MAX_IMAGE) return json(res, 413, { error: 'image trop grosse (15 Mo au plus)' })
+      await fs.mkdir(IMAGES, { recursive: true })
+      const d = new Date()
+      const two = (n) => String(n).padStart(2, '0')
+      const stamp = `${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}${two(d.getSeconds())}`
+      const file = path.join(IMAGES, `${stamp}-${Math.random().toString(36).slice(2, 8)}.${ext}`)
+      await fs.writeFile(file, bytes)
+      return json(res, 200, { path: file })
+    }
+    // l'aperçu d'une image collée (seulement celles du dossier des images)
+    if (route === 'GET /api/image') {
+      const name = path.basename(String(q('name') ?? ''))
+      const ext = name.split('.').pop()
+      if (!Object.values(IMAGE_TYPES).includes(ext)) return json(res, 404, { error: 'introuvable' })
+      const data = await fs.readFile(path.join(IMAGES, name)).catch(() => null)
+      if (!data) return json(res, 404, { error: 'introuvable' })
+      res.writeHead(200, { 'content-type': Object.keys(IMAGE_TYPES).find((k) => IMAGE_TYPES[k] === ext), 'cache-control': 'private, max-age=3600' })
+      return res.end(data)
+    }
+
     if (route === 'POST /api/event') {
       const ev = await body(req)
       if (ev.type === 'prefs') prefs = ev.prefs ?? null

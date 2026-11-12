@@ -63,6 +63,8 @@ On peut passer de l'une à l'autre : la touche `w` du panneau ouvre la page web 
   - `#i3` : l'idée n° 3 de la boîte à idées est jointe en entier et passe « en cours »
 - `Ctrl+Entrée` envoie ; `↑` et `↓` rappellent les prompts déjà envoyés ; le brouillon est gardé
 - **⤓ Terminal** (`Mod+Alt+Entrée`) : le prompt va dans la zone de saisie de Claude Code, sans partir. Tu le relis ou le complètes dans le terminal, puis tu l'envoies de là ; un brouillon déjà tapé dans le terminal est gardé, le prompt s'ajoute après. Les idées `#i3` qu'il mentionne sont jointes à l'envoi, comme depuis la page
+- **⏹ Arrêter** (`Alt+.`, macOS `⌃.`) : à côté d'Envoyer et sous la conversation pendant que Claude travaille, il l'arrête comme Échap dans le terminal. Un tour arrêté ne lance pas la file d'attente : « ⤴ » la relance
+- **Images** : colle (`Mod+V`) ou glisse une image dans le prompt. Elle est enregistrée à part et mentionnée en `@chemin`, avec sa vignette au-dessus du prompt (✕ pour la retirer) ; Claude l'ouvre avec son outil Read. PNG, JPEG, GIF ou WebP, 15 Mo au plus, effacées après 30 jours
 - **File d'attente** : un prompt envoyé pendant que Claude travaille attend son tour et part quand Claude a fini. On peut le retirer, le reprendre dans l'éditeur ou l'envoyer tout de suite
 - **Plan de Claude** en direct, au-dessus de l'éditeur : sa liste de tâches, l'étape en cours, la progression
 
@@ -72,6 +74,15 @@ Le contexte joint (emplacements des fichiers, idées, revue) apparaît sous le p
 
 Le premier onglet de l'éditeur, fixe (il ne se ferme pas et reste à gauche même quand les onglets défilent), affiche la conversation avec Claude Code : tes prompts, ses réponses en markdown (code coloré, chemins `fichier:ligne` cliquables) et ses appels d'outils, dépliables pour voir leur résultat. 🔧 Outils les masque, ⇩ Suivre garde la fin à l'écran. Elle se met à jour pendant que Claude travaille ; un ● sur l'onglet signale du nouveau quand tu es sur un fichier. L'éditeur de prompt reste en bas, toujours disponible.
 
+- **La session**, sous la barre de la conversation :
+  - **🗂 Session ▾** liste les conversations du projet (titre ou premier prompt, date, coût) : un clic reprend l'une d'elles, comme `/resume`. La page suit la bascule
+  - **＋ Nouvelle** ouvre une conversation vierge, comme `/clear` : celle d'avant reste dans la liste
+  - Une ligne de bascules, en un clic :
+    - **Modèle** : Opus · Sonnet · Haiku · Fable, et le menu « … » pour les autres (1M de contexte, par défaut). Comme `/model`, le choix devient aussi ton modèle par défaut
+    - **Effort** : low · medium · high · xhigh · max. Comme `/effort`, il devient aussi ton effort par défaut
+    - **Permissions** : le mode de la session en direct (🛡 Auto, Plan, Modifs acceptées…), **📋 Plan** pour passer en mode plan (`/plan`), et le mode des **nouvelles** sessions (`/config`). Claude Code ne laisse pas une mod changer le mode de la session en cours : pour en sortir, Maj+Tab dans le terminal, ou accepte le plan de Claude
+  - Si Claude travaille, la bascule attend qu'il ait fini
+- Un sous-agent lancé en arrière-plan qui finit s'affiche en une ligne (« 🤖 Agent … finished ») ; l'appel Agent a un lien **🤖 voir l'agent**
 - **Taille du texte** : A− / A+ dans la barre de la conversation (ou `Alt+=` / `Alt+-`, macOS `⌃=` / `⌃-`), de 11 à 32 px ; le pourcentage remet la taille par défaut. Elle vaut aussi pour les questions de Claude, et se règle dans ⚙️
 - **🖼 Artefacts** : ceux que Claude publie pendant la session (outil Artifact) s'affichent en carte dans la conversation, et le bouton 🖼 Artefacts liste tout : titre, description, nombre de versions, Ouvrir ↗, Copier le lien, le fichier source
 
@@ -90,7 +101,7 @@ Le bouton en haut ouvre un tableau de bord de la session et de Claude, actualis�
 - **Ce mois-ci**, tous projets : le total au prix de l'API et sa projection. Indique le prix de ton abonnement pour voir ce qu'il vaut au prix de l'API et le **coût réel estimé** de la session (sa part de l'abonnement)
 - **Projet** : le coût total de toutes ses sessions, par jour sur 30 jours, et la liste des sessions (titre, durée, modèles, coût)
 
-Les coûts des sessions passées viennent des fichiers de session de Claude Code (`~/.claude/projects/`), lus seulement à l'ouverture du tableau.
+Les coûts des sessions passées viennent des fichiers de session de Claude Code (`~/.claude/projects/`), lus seulement à l'ouverture du tableau. D'un fichier de plus de 4 Mo (une longue session), seules les lignes de coût et de titre sont lues.
 
 ### Les outils de Claude
 
@@ -107,14 +118,21 @@ La mod donne à Claude des outils à lui :
 
 - 💡 **Boîte à idées** (par projet) : ajouter, étiqueter, filtrer (nouvelles, en cours, faites), modifier d'un double-clic, ✍ mentionner dans le prompt, 📎 joindre au prochain prompt. Clic droit sur du code → 💡 (ou `Ctrl+Alt+I`) pour partir d'une sélection
 - 📍 **Annotations de Claude** : une liste par fichier ; un clic ouvre le fichier sur la ligne, surlignée avec un 📍 dans la marge
+- 🤖 **Sous-agents** : ceux que Claude lance pendant la session, en direct : la tâche, le type, la durée, le nombre d'outils et la dernière action ; un agent lancé par un autre se range sous lui. Un clic ouvre sa conversation : la consigne de Claude, ses outils et son rapport, mise à jour tant qu'il travaille
 - ▶ **Commandes** : taper une commande et la lancer, en enregistrer (par projet), relancer, arrêter. Plusieurs peuvent tourner en même temps, un serveur de dev par exemple. 🖥 ouvre le terminal d'une commande : sa sortie en direct, ■ Arrêter, ↻ Relancer, 📎 joindre la sortie pour Claude : il reçoit le chemin du journal complet de la commande et en lit ce qu'il lui faut. Les scripts de `package.json`, les tests détectés et les cibles du `Makefile` sont proposés
 
 ### ⚙️ Paramètres
 
 - **Éditeur** : police, taille, tabulations, retour à la ligne, minimap, thème… et un `settings.json` façon VS Code (toutes les options `editor.*` de Monaco). « Importer mon settings.json de VS Code » reprend tes réglages `editor.*` de VS Code (ou Cursor)
+- **Réglages du projet** : comme dans VS Code, un `.vscode/settings.json` à la racine du projet (commentaires et virgules finales acceptés) passe devant tes réglages, et `"[typescript]": { ... }` vaut pour un langage. Pris en compte : les `editor.*`, `editor.formatOnSave`, `files.trimTrailingWhitespace`, `files.insertFinalNewline`. Relu dès qu'il change ; ⚙️ le crée ou l'ouvre
 - **⌨️ Raccourcis** : changer les touches de chaque action
 - **IDE for Claude** : ouverture automatique du panneau, validation automatique (dès qu'un prompt part, tout ce qui est en revue est validé), revue jointe au prompt, durée de conservation de l'historique, ouverture des fichiers modifiés, son de fin, modèle de la barre d'état
 - **Claude Code** : les réglages de `/config`, appliqués tout de suite, et les fichiers `settings.json` (utilisateur, projet, local) à modifier directement. Le JSON est vérifié avant d'être écrit, et l'ancienne version est gardée en `.bak`
+
+### Le code : formatage, définition, survol
+
+- **Formater** (`Alt+Shift+F`, macOS `⇧⌥F`) : avec le Prettier du projet (`node_modules/.bin/prettier`, sa configuration comprise) ; sinon le formateur de Monaco pour JavaScript, TypeScript, JSON, CSS et HTML. `editor.formatOnSave` formate à l'enregistrement
+- **Aller à la définition** (`F12`, ou `Mod+clic`) et **survol** (type, signature, documentation) pour TypeScript et JavaScript, d'un fichier du projet à l'autre : la page charge les sources du projet (800 fichiers, 8 Mo au plus). Sans `node_modules`, seules les erreurs de syntaxe sont soulignées, pas celles de type
 
 ### Barre d'état
 
@@ -145,8 +163,10 @@ Ci-dessous, `Mod` est `Cmd` sur macOS et `Ctrl` ailleurs. Les raccourcis à lett
 | `Mod+S` | Enregistrer |
 | `Mod+Maj+F` | Chercher dans le projet |
 | `Ctrl+G` | Aller à la ligne |
+| `Alt+Shift+F` · macOS `⇧⌥F` | Formater le fichier |
+| `F12` (ou `Mod+clic`) | Aller à la définition |
 | `Mod+B` | Masquer ou afficher la barre latérale |
-| `Alt+1` à `Alt+7` · macOS `⌃1` à `⌃7` | Fichiers, recherche, historique, revue, idées, annotations, commandes |
+| `Alt+1` à `Alt+8` · macOS `⌃1` à `⌃8` | Fichiers, recherche, historique, revue, idées, annotations, commandes, sous-agents |
 | `Alt+0` · macOS `⌃0` | 💬 Conversation, et retour au fichier |
 | `Alt+9` · macOS `⌃9` | 📊 Claude Status |
 | `Alt+Q` · macOS `⌃Q` | Réduire / afficher la question de Claude |
@@ -158,6 +178,7 @@ Ci-dessous, `Mod` est `Cmd` sur macOS et `Ctrl` ailleurs. Les raccourcis à lett
 | `Alt+I` · macOS `⌃I` | Nouvelle idée depuis la sélection |
 | `Alt+E` · macOS `⌃E` | Relancer la dernière commande |
 | `Alt+X` · macOS `⌃X` | Arrêter la commande |
+| `Alt+.` · macOS `⌃.` | ⏹ Arrêter Claude, comme Échap dans le terminal |
 | `Mod+Entrée` | Envoyer le prompt, valider un commentaire |
 | `Mod+Alt+Entrée` | Mettre le prompt dans le terminal, sans l'envoyer |
 | `↑` / `↓` dans le prompt | Prompts précédents |
@@ -170,6 +191,7 @@ Un raccourci qui n'a rien à faire là où tu es garde l'effet habituel de la to
 |---|---|---|
 | Historique des prompts, revue en cours, file d'attente, plan | par session : retrouvés en reprenant la conversation (`claude --resume`, la liste de `/resume`, `claude -c`) | `~/.claude/plugins/data/ide-for-claude/sessions/<session>.json`, effacé après 30 jours (réglable) |
 | Sorties des commandes lancées depuis la page | un journal par lancement | `~/.claude/plugins/data/ide-for-claude/runs/`, effacé après la même durée que l'historique |
+| Images collées dans le prompt | une par image | `~/.claude/plugins/data/ide-for-claude/images/`, effacées après 30 jours |
 | Idées, annotations, commandes enregistrées, prompts envoyés depuis la page | par projet | `~/.claude/plugins/data/ide-for-claude/projects/<dossier>-<empreinte>.json` |
 | Page web : onglets ouverts, fichier affiché, position dans chaque fichier, colonnes, replis, panneau latéral, brouillon du prompt, notifications | par projet | stockage de la mod (`$.store`) |
 | Réglages de l'éditeur et d'IDE for Claude, panneau terminal | pour tous les projets | stockage de la mod (`$.store`) |

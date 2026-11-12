@@ -1,5 +1,5 @@
 // La conversation de la session et le tableau de bord « Claude Status » de la page.
-import type { EngineInterface } from 'claude-code'
+import type { EngineInterface, SessionMessage } from 'claude-code'
 
 type $ = EngineInterface
 
@@ -7,7 +7,7 @@ type $ = EngineInterface
 
 export type ConvTool = { tool: string; label: string; isError?: boolean; out?: string; agentId?: string }
 export type ConvArtifact = { url: string; title: string; description?: string; icon?: string; path?: string; versions: number; i: number }
-export type ConvItem = { i: number; role: 'user' | 'assistant'; text: string; tools?: ConvTool[]; kind?: 'summary' | 'command' }
+export type ConvItem = { i: number; role: 'user' | 'assistant'; text: string; tools?: ConvTool[]; kind?: 'summary' | 'command' | 'notice' }
 
 const MAX_OUT = 1500
 const MAX_TEXT = 60_000
@@ -57,7 +57,14 @@ export function toolLabel(cwd: string, tool: string, input: Record<string, unkno
 }
 
 /** Le texte d'un message utilisateur sans ce que Claude Code y glisse pour le modèle. */
-export function userText(raw: string): { text: string; kind?: 'summary' | 'command' } {
+export function userText(raw: string): { text: string; kind?: 'summary' | 'command' | 'notice' } {
+  // la fin d'un sous-agent lancé en arrière-plan : une ligne, pas le XML
+  const task = raw.match(/<task-notification>([\s\S]*?)<\/task-notification>/)
+  if (task) {
+    const summary = task[1]!.match(/<summary>([\s\S]*?)<\/summary>/)?.[1]?.trim()
+    const status = task[1]!.match(/<status>([\s\S]*?)<\/status>/)?.[1]?.trim()
+    return { text: `🤖 ${summary || 'Sous-agent : ' + (status ?? 'terminé')}`, kind: 'notice' }
+  }
   let t = raw.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').replace(/<local-command-caveat>[\s\S]*?<\/local-command-caveat>/g, '')
   const cmd = t.match(/<command-name>([\s\S]*?)<\/command-name>/)
   if (cmd) {
@@ -76,8 +83,30 @@ export function userText(raw: string): { text: string; kind?: 'summary' | 'comma
  * `first` repère le début : s'il change (/clear, plus de 4096 entrées), la page recharge tout.
  */
 export async function conversation($: $, from = 0) {
-  const cwd = await $.session.cwd()
   const msgs = await $.session.messages()
+  const items = await convItems($, msgs, from)
+  const head = msgs[0]
+  return {
+    session: await $.session.id().catch(() => ''),
+    total: msgs.length,
+    first: head ? `${head.role}:${head.text.slice(0, 80)}` : '',
+    from,
+    items,
+    artifacts: await artifactsOf($, await $.session.cwd(), msgs),
+  }
+}
+
+/** La conversation d'un sous-agent : sa consigne, ses réponses et ses outils. */
+export async function agentConversation($: $, agentId: string) {
+  const msgs = await $.session.messages({ agentId })
+  if (!Array.isArray(msgs)) return { id: agentId, items: [], denied: true }
+  return { id: agentId, items: await convItems($, msgs as SessionMsgs, 0) }
+}
+
+type SessionMsgs = readonly SessionMessage[]
+
+async function convItems($: $, msgs: SessionMsgs, from: number) {
+  const cwd = await $.session.cwd()
   const items: ConvItem[] = []
   for (let i = Math.max(0, from); i < msgs.length; i++) {
     const m = msgs[i]!
@@ -87,18 +116,22 @@ export async function conversation($: $, from = 0) {
       items.push({ i, role: 'user', text: clip(text, MAX_TEXT), ...(kind ? { kind } : {}) })
       continue
     }
-    const tools = m.toolUses.map(u => ({
+    // le rapport d'un sous-agent (SubagentHandback) est sa réponse, pas un outil
+    const handback = m.toolUses
+      .filter(u => u.tool === 'SubagentHandback' && typeof u.input?.message === 'string')
+      .map(u => String(u.input!.message))
+    const text = [m.text, ...handback].filter(Boolean).join('\n\n')
+    const tools = m.toolUses.filter(u => u.tool !== 'SubagentHandback').map(u => ({
       tool: u.tool,
       label: toolLabel(cwd, u.tool, u.input ?? {}),
       ...(u.isError ? { isError: true } : {}),
       ...(u.text ? { out: clip(u.text, MAX_OUT) } : {}),
       ...(u.agentId ? { agentId: u.agentId } : {}),
     }))
-    if (!m.text && !tools.length) continue
-    items.push({ i, role: 'assistant', text: clip(m.text, MAX_TEXT), ...(tools.length ? { tools } : {}) })
+    if (!text && !tools.length) continue
+    items.push({ i, role: 'assistant', text: clip(text, MAX_TEXT), ...(tools.length ? { tools } : {}) })
   }
-  const head = msgs[0]
-  return { total: msgs.length, first: head ? `${head.role}:${head.text.slice(0, 80)}` : '', from, items, artifacts: await artifactsOf($, cwd, msgs) }
+  return items
 }
 
 // ---------- artefacts publiés pendant la session (outil Artifact) ----------
@@ -162,6 +195,8 @@ type ModelCost = {
 export type SessionCostInfo = {
   id: string
   title?: string
+  /** le premier prompt de la personne, quand la session n'a pas de titre */
+  prompt?: string
   start?: number
   last: number
   usd: number | null
@@ -187,12 +222,35 @@ function lastLine(text: string, type: string): Record<string, unknown> | null {
   }
 }
 
+/** Le premier prompt tapé par la personne (pas une commande, pas un rappel du système). */
+function firstPrompt(text: string): string | undefined {
+  let at = 0
+  for (let n = 0; n < 400 && at < text.length; n++) {
+    const b = text.indexOf('\n', at)
+    const line = text.slice(at, b < 0 ? undefined : b)
+    at = b < 0 ? text.length : b + 1
+    if (!line.includes('"type":"user"')) continue
+    try {
+      const o = JSON.parse(line) as { isMeta?: boolean; message?: { content?: unknown } }
+      if (o.isMeta) continue
+      const c = o.message?.content
+      const t = typeof c === 'string' ? c : Array.isArray(c) ? (c.find(x => x?.type === 'text') as { text?: string } | undefined)?.text : undefined
+      const clean = t?.trim()
+      if (clean && !clean.startsWith('<') && !/^Caveat:/.test(clean)) return clean.slice(0, 200)
+    } catch {
+      // une ligne coupée (début d'un gros fichier) : on passe
+    }
+  }
+  return undefined
+}
+
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
 
 export function sessionCostOf(id: string, text: string, mtimeMs: number): SessionCostInfo {
   const cs = lastLine(text, 'cost-state')
   const title = (lastLine(text, 'custom-title')?.customTitle ?? lastLine(text, 'ai-title')?.aiTitle) as string | undefined
-  const info: SessionCostInfo = { id, last: mtimeMs, usd: null, models: [], ...(title ? { title } : {}) }
+  const prompt = firstPrompt(text)
+  const info: SessionCostInfo = { id, last: mtimeMs, usd: null, models: [], ...(title ? { title } : {}), ...(prompt ? { prompt } : {}) }
   if (!cs) {
     const first = text.match(/"timestamp":"([^"]+)"/)
     if (first) info.start = Date.parse(first[1]!)
@@ -223,6 +281,21 @@ export function sessionCostOf(id: string, text: string, mtimeMs: number): Sessio
 // (la session en cours, qui grossit sans cesse, n'est relue qu'une fois toutes les 30 s)
 const costCache = new Map<string, { mtimeMs: number; size: number; readAt: number; info: SessionCostInfo }>()
 
+/** `$.fs.read` refuse les fichiers de plus de 4 Mio : une longue session en fait vite 20. */
+const BIG_FILE = 4_000_000
+
+/**
+ * D'un gros fichier de session, juste ce que le tableau de bord lit : le début (la date du premier
+ * message) et les lignes de coût et de titre. Sans ça, une longue session sortait des totaux
+ * dès qu'elle n'était plus la session en cours (après un /clear ou une reprise).
+ */
+async function bigSessionText($: $, path: string): Promise<string | null> {
+  // par redirection : un nom qui commence par « - » ne passe jamais pour une option
+  const script = 'head -c 20000 < "$1"; echo; grep -E \'"type":"(cost-state|custom-title|ai-title)"\' < "$1"'
+  const r = await $.process.run(['sh', '-c', script, 'sh', path], { timeoutMs: 20_000 }).catch(() => null)
+  return r && r.stdout ? r.stdout : null
+}
+
 async function sessionsIn($: $, dir: string, since = 0): Promise<SessionCostInfo[]> {
   const entries = await $.fs.list(dir).catch(() => [])
   const out: SessionCostInfo[] = []
@@ -234,7 +307,7 @@ async function sessionsIn($: $, dir: string, since = 0): Promise<SessionCostInfo
       out.push(hit.info)
       continue
     }
-    const text = await $.fs.read(path).catch(() => null)
+    const text = e.size > BIG_FILE ? await bigSessionText($, path) : await $.fs.read(path).catch(() => null)
     if (typeof text !== 'string') continue
     const info = sessionCostOf(e.name.slice(0, -6), text, e.mtimeMs)
     costCache.set(path, { mtimeMs: e.mtimeMs, size: e.size, readAt: Date.now(), info })
@@ -267,6 +340,30 @@ async function projectDir($: $, cwd: string, id: string) {
   }
   if (dir) projectDirFound = { id, dir }
   return dir
+}
+
+// ---------- les sessions du projet, pour en changer depuis la page ----------
+
+/** Les sessions du projet, la plus récente d'abord : de quoi reprendre l'une d'elles (/resume). */
+export async function projectSessions($: $) {
+  const [cwd, id] = await Promise.all([$.session.cwd(), $.session.id().catch(() => '')])
+  const dir = id ? await projectDir($, cwd, id) : null
+  const list = dir ? await sessionsIn($, dir) : []
+  const sessions = list
+    .filter(s => s.id === id || s.title || s.prompt)
+    .sort((a, b) => b.last - a.last)
+    .slice(0, 150)
+    .map(s => ({
+      id: s.id,
+      ...(s.title ? { title: s.title } : {}),
+      ...(s.prompt ? { prompt: s.prompt } : {}),
+      ...(s.start ? { start: s.start } : {}),
+      last: s.last,
+      usd: s.usd,
+      ...(s.id === id ? { current: true } : {}),
+    }))
+  if (id && !sessions.some(s => s.id === id)) sessions.unshift({ id, last: Date.now(), usd: null, current: true })
+  return { current: id, sessions }
 }
 
 // ---------- tableau de bord ----------
