@@ -148,7 +148,9 @@
   .turn.current .head { background: var(--accent-soft); }
   .turn .now { font-size: 10px; font-weight: 600; color: #fff; background: var(--accent); border-radius: 4px; padding: 0 5px; }
   .turn .f.done span:first-child { color: var(--muted); text-decoration: line-through; }
-  .turn .acts .okb { border-color: var(--ok); color: var(--ok); }
+  .turn .acts .okb, #p-history .okb, header .okb { border-color: var(--ok); color: var(--ok); }
+  .turn.todo { border-color: var(--ok); }
+  .turn .todo-tag { font-size: 10px; font-weight: 600; color: var(--ok); border: 1px solid var(--ok); border-radius: 4px; padding: 0 5px; }
   .turn .acts .badb { border-color: var(--bad); color: var(--bad); }
   .res { padding: 2px 10px 2px 22px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: 12px ui-monospace, monospace; color: var(--muted); }
   .res:hover { background: var(--hover); color: var(--text); }
@@ -177,6 +179,7 @@
     <span class="dot" id="dot" title="Connexion"></span>
     <span class="name" id="name">IDE for Claude</span>
     <span class="spacer"></span>
+    <button class="ghost okb" id="allOk" title="Valider tous les fichiers encore en revue, tous prompts confondus" hidden></button>
     <button class="ghost" id="qoBtn" title="Ouvrir un fichier">🔎 Ouvrir <kbd>Ctrl+P</kbd></button>
     <button class="ghost" id="notifBtn" title="Notification quand Claude a fini">🔕</button>
   </header>
@@ -785,6 +788,11 @@ function renderHistory() {
   box.replaceChildren()
   if (!turns.length) return box.append(h('div', { class: 'hint' }, 'Aucune modif de Claude pour l\'instant. Chaque prompt qui touche des fichiers apparaîtra ici.'))
   const touched = [...new Map(srv.history.flatMap((t) => t.files.map((f) => [f.path, f]))).values()]
+  if (srv.changes.length) {
+    box.append(h('div', { class: 'pad' }, h('button', {
+      class: 'okb', style: 'width:100%', title: 'Valider tous les fichiers encore en revue, tous prompts confondus', onclick: () => acceptEverything(),
+    }, `✅ Tout valider (${srv.changes.length} fichier${srv.changes.length > 1 ? 's' : ''} en revue)`)))
+  }
   if (touched.length) {
     box.append(h('div', { class: 'turn' },
       h('div', { class: 'head' }, h('b', {}, 'Toute la session'), h('span', { class: 't' }, `${touched.length} fichier${touched.length > 1 ? 's' : ''}`)),
@@ -793,27 +801,36 @@ function renderHistory() {
   }
   for (const t of turns) {
     const pending = t.files.filter((f) => f.inReview)
+    const acceptBtn = pending.length
+      ? h('button', { class: 'okb', title: 'Valider tous les fichiers de ce prompt encore en revue', onclick: () => acceptAll(t) }, `✅ Tout accepter (${pending.length})`)
+      : null
     const acts = t.current
-      ? [
-          pending.length ? h('button', { class: 'okb', title: 'Valider tous les fichiers de ce prompt encore en revue', onclick: () => acceptAll(t) }, `✅ Tout accepter (${pending.length})`) : null,
-          t.files.length ? h('button', { class: 'badb', title: 'Remettre tous les fichiers de ce prompt dans leur état d\'avant', onclick: () => restore(t, false, true) }, '❌ Tout refuser') : null,
-        ]
-      : [h('button', { onclick: () => restore(t) }, '↶ Revenir avant ce prompt')]
-    box.append(h('div', { class: 'turn' + (t.current ? ' current' : '') },
-      h('div', { class: 'head' }, h('b', {}, `Prompt ${t.id}`), t.current ? h('span', { class: 'now' }, 'EN COURS') : null, h('span', { class: 't' }, fmtTime(t.at))),
+      ? [acceptBtn, t.files.length ? h('button', { class: 'badb', title: 'Remettre tous les fichiers de ce prompt dans leur état d\'avant', onclick: () => restore(t, false, true) }, '❌ Tout refuser') : null]
+      : [acceptBtn, h('button', { onclick: () => restore(t) }, '↶ Revenir avant ce prompt')]
+    box.append(h('div', { class: 'turn' + (t.current ? ' current' : pending.length ? ' todo' : '') },
+      h('div', { class: 'head' }, h('b', {}, `Prompt ${t.id}`),
+        t.current ? h('span', { class: 'now' }, 'EN COURS') : pending.length ? h('span', { class: 'todo-tag' }, `${pending.length} à valider`) : null,
+        h('span', { class: 't' }, fmtTime(t.at))),
       h('div', { class: 'prompt', title: t.prompt }, t.prompt || '(sans texte)'),
       t.current && !t.files.length ? h('div', { class: 'hint' }, 'Aucune modif de Claude pour ce prompt pour l\'instant.') : null,
       t.files.map((f) => h('div', {
-        class: 'f' + (view.kind === 'turn' && view.id === t.id && view.path === f.path ? ' cur' : '') + (t.current && !f.inReview ? ' done' : ''),
-        title: t.current && !f.inReview ? 'Validé : sorti de la revue' : '',
+        class: 'f' + (view.kind === 'turn' && view.id === t.id && view.path === f.path ? ' cur' : '') + (pending.length && !f.inReview ? ' done' : ''),
+        title: f.inReview ? 'En revue' : pending.length ? 'Validé : sorti de la revue' : '',
         onclick: () => openTurn(t.id, f.path),
       },
-        h('span', {}, (t.current && !f.inReview ? '✅ ' : f.isNew ? '🆕 ' : '') + f.rel, whoTag(f)),
+        h('span', {}, ((t.current || pending.length) && !f.inReview ? '✅ ' : f.isNew ? '🆕 ' : '') + f.rel, whoTag(f)),
         h('span', { class: 's' }, h('span', { class: 'add' }, `+${f.add}`), ' ', h('span', { class: 'del' }, `-${f.del}`)),
       )),
       acts.some(Boolean) ? h('div', { class: 'acts' }, acts) : null,
     ))
   }
+}
+/** Tout valider : chaque fichier encore en revue en sort, quel que soit son prompt. */
+function acceptEverything() {
+  const paths = srv.changes.map((c) => c.path)
+  if (!paths.length) return
+  if (cur && paths.includes(cur) && !tabs.includes(cur)) { tabs.push(cur); savePrefs() }
+  event({ type: 'acceptFiles', paths })
 }
 /** Tout accepter : les fichiers du prompt encore en revue en sortent, comme avec ✅ Fichier. */
 function acceptAll(t) {
@@ -981,6 +998,8 @@ async function refreshState() {
   renderTree()
   renderHistory()
   renderReview()
+  $('allOk').hidden = !srv.changes.length
+  $('allOk').textContent = `✅ Tout valider (${srv.changes.length})`
   const f = cur && files.get(cur)
   const busy = f && view.kind === 'file' && f.model.getValue() !== f.base
   const fresh = srv.changes.find((c) => !prev.has(c.path))
@@ -1152,6 +1171,7 @@ require(['vs/editor/editor.main'], async () => {
     if (cur) openFile(cur, { keepView: true })
   }
   for (const b of $('sideTabs').children) b.onclick = () => showPanel(b.dataset.p)
+  $('allOk').onclick = () => acceptEverything()
   $('testsRun').onclick = () => runTests()
   $('testsStop').onclick = () => api('/api/tests/stop', { method: 'POST' })
   $('testsSend').onclick = () => sendTests()
