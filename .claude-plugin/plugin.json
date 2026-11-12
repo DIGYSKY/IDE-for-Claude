@@ -1,6 +1,6 @@
 {
   "name": "ide-for-claude",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "IDE web et terminal pour Claude Code : relire et valider ses modifs, lui écrire avec des mentions de fichiers et d'idées, boîte à idées, annotations, plan en direct, exécuteur de commandes",
   "author": {
     "name": "DIGYSKY",

@@ -295,6 +295,57 @@ async function suggestions() {
   return out.slice(0, 40)
 }
 
+// ---------- ouvrir une commande dans le vrai terminal du système ----------
+const shq = (v) => `'${String(v).replace(/'/g, `'\\''`)}'` // guillemets simples pour sh
+const asq = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` // chaîne AppleScript
+const onPath = (bin) =>
+  (process.env.PATH || '').split(path.delimiter).some((d) => {
+    try { return realpathSync(path.join(d, bin)) && true } catch { return false }
+  })
+const detached = (cmd, argv, opts = {}) =>
+  new Promise((resolve, reject) => {
+    const child = spawn(cmd, argv, { cwd: ROOT, detached: true, stdio: 'ignore', ...opts })
+    child.once('error', reject)
+    child.once('spawn', () => { child.unref(); resolve() })
+  })
+const osascript = (script) =>
+  new Promise((resolve, reject) => execFile('osascript', ['-e', script], (err, _o, stderr) => (err ? reject(new Error(String(stderr || err.message).trim())) : resolve())))
+
+/** Ouvre une fenêtre du terminal du système, dans le dossier du projet, et y lance la commande telle quelle.
+ *  Sur macOS : le terminal où tourne Claude Code (iTerm s'il y tourne, sinon Terminal). La fenêtre reste ouverte après la commande. */
+async function openTerminal(command) {
+  const line = `cd ${shq(ROOT)} && ${command}`
+  if (process.platform === 'darwin') {
+    if (process.env.TERM_PROGRAM === 'iTerm.app') {
+      await osascript(`tell application "iTerm"
+  activate
+  set w to (create window with default profile)
+  tell current session of w to write text ${asq(line)}
+end tell`)
+      return 'iTerm'
+    }
+    await osascript(`tell application "Terminal"
+  activate
+  do script ${asq(line)}
+end tell`)
+    return 'Terminal'
+  }
+  if (process.platform === 'win32') {
+    await detached('cmd.exe', ['/c', 'start', '""', 'cmd.exe', '/k', command], { windowsVerbatimArguments: true })
+    return 'cmd'
+  }
+  // Linux et autres : le premier émulateur trouvé ; le shell reste ouvert après la commande
+  const keep = `${line}; exec "\${SHELL:-sh}"`
+  // gnome-terminal (Ubuntu) d'abord : son « x-terminal-emulator » n'accepte pas toujours plusieurs arguments après -e
+  const terms = [['gnome-terminal', '--'], ['konsole', '-e'], ['xfce4-terminal', '-x'], ['kitty', ''], ['alacritty', '-e'], ['x-terminal-emulator', '-e'], ['xterm', '-e']]
+  for (const [bin, flag] of terms) {
+    if (!onPath(bin)) continue
+    await detached(bin, [...(flag ? [flag] : []), 'sh', '-c', keep])
+    return bin
+  }
+  throw new Error('aucun terminal trouvé (x-terminal-emulator, gnome-terminal, konsole, xterm…)')
+}
+
 function startRun(command, name) {
   // on ne garde que les derniers lancements terminés
   const done = [...runs.values()].filter((r) => r.ended)
@@ -670,6 +721,13 @@ const server = http.createServer(async (req, res) => {
       if (typeof command !== 'string' || !command.trim()) return json(res, 400, { error: 'commande vide' })
       const r = startRun(command.trim(), typeof name === 'string' ? name.trim() : '')
       return json(res, 200, runInfo(r))
+    }
+
+    if (route === 'POST /api/run/terminal') {
+      const { command } = await body(req)
+      if (typeof command !== 'string' || !command.trim()) return json(res, 400, { error: 'commande vide' })
+      const app = await openTerminal(command.trim())
+      return json(res, 200, { ok: true, app })
     }
 
     if (route === 'POST /api/run/stop') {

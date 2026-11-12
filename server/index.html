@@ -25,7 +25,13 @@
   #app { display: grid; grid-template-columns: var(--side, 280px) 4px 1fr; grid-template-rows: 36px 1fr 26px; height: 100vh; }
   header { grid-column: 1 / 4; display: flex; align-items: center; gap: 10px; padding: 0 12px;
     background: var(--panel); border-bottom: 1px solid var(--border); }
-  header .name { font-weight: 600; }
+  header .brand { color: var(--muted); }
+  header .sep { color: var(--muted); opacity: .6; }
+  header .name { font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+  /* icônes des fichiers et des dossiers (Material Icon Theme) */
+  .fi { width: 16px; height: 16px; flex: none; display: inline-block; vertical-align: -3px; text-align: center; font-size: 12px; line-height: 16px; }
+  .iname { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; }
+  .iname > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
   .dot.on { background: var(--ok); }
   .spacer { flex: 1; }
@@ -430,7 +436,7 @@
 <div id="app">
   <header>
     <span class="dot" id="dot" title="Connexion"></span>
-    <span class="name" id="name">IDE for Claude</span>
+    <span class="brand">IDE for Claude</span><span class="sep" id="nameSep" hidden>/</span><span class="name" id="name"></span>
     <span class="spacer"></span>
     <button class="ghost okb" id="allOk" title="Valider tous les fichiers encore en revue, tous prompts confondus" hidden></button>
     <button class="ghost" id="qoBtn" title="Ouvrir un fichier">🔎 Ouvrir <kbd id="qoKey">Ctrl+P</kbd></button>
@@ -469,8 +475,8 @@
     <div class="panel" id="p-ann"><div id="anns"></div></div>
     <div class="panel" id="p-agents"><div id="agents"></div></div>
     <div class="panel" id="p-runs">
-      <div class="row2"><input type="text" id="runCmd" placeholder="Une commande (Entrée pour la lancer)" spellcheck="false">
-        <button id="runGo" class="primary" title="Lancer">▶</button><button id="runSave" title="Enregistrer cette commande">💾</button></div>
+      <div class="row2"><input type="text" id="runCmd" placeholder="Une commande (Entrée : lancer · Maj+Entrée : vrai terminal)" spellcheck="false">
+        <button id="runGo" class="primary" title="Lancer">▶</button><button id="runTerm" title="Lancer dans un vrai terminal (fenêtre du système)">⧉</button><button id="runSave" title="Enregistrer cette commande">💾</button></div>
       <div id="saveForm" hidden><input type="text" id="saveName" placeholder="Nom (ex. Serveur de dev)"><button id="saveOk" class="primary">OK</button><button id="saveNo">✕</button></div>
       <h2>Commandes enregistrées</h2><div id="cmds"></div>
       <h2>Lancements</h2><div id="runs"></div>
@@ -525,7 +531,7 @@
       </div>
       <div id="runView" hidden>
         <div id="runBar"><b id="runName"></b><code id="runCmdShow"></code><span id="runSt" class="st"></span><span class="spacer"></span>
-          <button id="runStop">■ Arrêter</button><button id="runAgain">↻ Relancer</button><button id="runAttach" title="Joindre la fin de la sortie à ton prochain prompt">📎 Pour Claude</button>
+          <button id="runStop">■ Arrêter</button><button id="runAgain">↻ Relancer</button><button id="runTermBar" title="Relancer cette commande dans un vrai terminal (fenêtre du système)">⧉ Terminal</button><button id="runAttach" title="Joindre la fin de la sortie à ton prochain prompt">📎 Pour Claude</button>
           <button id="runFollow" class="on" title="Suivre la fin de la sortie">⇩ Suivre</button><button id="runClose">✕</button></div>
         <pre id="runOut"></pre>
       </div>
@@ -614,6 +620,56 @@ let monaco, editor, diff
 
 const rel = (p) => (p.startsWith(srv.root + srv.sep) ? p.slice(srv.root.length + 1) : p)
 const base = (p) => p.split(/[\\/]/).pop()
+
+// ---------- icônes des fichiers et des dossiers (Material Icon Theme, celui de VS Code) ----------
+const MI = 'https://cdn.jsdelivr.net/npm/material-icon-theme@5.12.0'
+let mi = null // le manifeste du thème ; false s'il n'a pas pu être chargé (on retombe alors sur les émojis)
+// extension -> langage VS Code, pour les fichiers que le thème reconnaît par leur langage plutôt que par leur extension
+const EXT_LANG = {
+  ts: 'typescript', mts: 'typescript', cts: 'typescript', tsx: 'typescriptreact', js: 'javascript', cjs: 'javascript', jsx: 'javascriptreact',
+  py: 'python', json: 'json', jsonc: 'jsonc', md: 'markdown', html: 'html', htm: 'html', css: 'css', scss: 'scss', less: 'less',
+  sh: 'shellscript', bash: 'shellscript', zsh: 'shellscript', rs: 'rust', go: 'go', yml: 'yaml', yaml: 'yaml', txt: 'plaintext',
+  java: 'java', c: 'c', h: 'c', cpp: 'cpp', hpp: 'cpp', cs: 'csharp', rb: 'ruby', php: 'php', swift: 'swift', kt: 'kotlin',
+  sql: 'sql', xml: 'xml', lua: 'lua', dart: 'dart', vue: 'vue', svelte: 'svelte',
+}
+const miLight = () => !matchMedia('(prefers-color-scheme: dark)').matches
+/** cherche une clé dans une table du thème, en préférant la variante claire quand la page est claire */
+const miGet = (table, k) => (miLight() && mi.light && mi.light[table] && mi.light[table][k]) || mi[table][k]
+function iconId(name, dir, open) {
+  const n = name.toLowerCase()
+  if (dir) return miGet(open ? 'folderNamesExpanded' : 'folderNames', n) || (open ? mi.folderExpanded : mi.folder)
+  const byName = miGet('fileNames', n)
+  if (byName) return byName
+  const parts = n.split('.')
+  // la plus longue extension d'abord : « d.ts », « test.ts », puis « ts »
+  for (let i = 1; i < parts.length; i++) { const id = miGet('fileExtensions', parts.slice(i).join('.')); if (id) return id }
+  const ext = parts.length > 1 ? parts[parts.length - 1] : ''
+  const lang = EXT_LANG[ext] || (ext && monaco ? monaco.languages.getLanguages().find((l) => (l.extensions || []).includes('.' + ext))?.id : null)
+  return (lang && miGet('languageIds', lang)) || mi.file
+}
+/** l'icône d'un fichier ou d'un dossier, d'après son nom */
+function ficon(name, dir = false, open = false) {
+  if (mi === false) return h('span', { class: 'fi' }, dir ? '📁' : '📄')
+  if (!mi) return h('span', { class: 'fi' })
+  const def = mi.iconDefinitions[iconId(name, dir, open)]
+  if (!def) return h('span', { class: 'fi' }, dir ? '📁' : '📄')
+  return h('img', { class: 'fi', src: `${MI}/icons/${def.iconPath.split('/').pop()}`, alt: '', draggable: 'false' })
+}
+/** icône + nom, pour les listes de fichiers */
+const fname = (p, label = rel(p)) => h('span', { class: 'iname' }, ficon(base(p)), h('span', {}, label))
+fetch(`${MI}/dist/material-icons.json`).then((r) => (r.ok ? r.json() : Promise.reject())).then((d) => { mi = d }, () => { mi = false }).then(() => {
+  if (!srv.root) return // l'état n'est pas encore là : refreshState affichera tout avec les icônes
+  for (const f of [renderTree, renderTabs, renderHistory, renderAnns]) try { f() } catch {}
+})
+
+/** titre de l'onglet du navigateur : le projet d'abord, puis le fichier affiché */
+function setTitle() {
+  const f = cur && files.get(cur)
+  const dirty = !!(view.kind === 'file' && f && f.model && f.model.getValue() !== f.base)
+  const t = `${dirty ? '● ' : ''}${srv.name || 'IDE for Claude'}${view.kind === 'file' && cur ? ' · ' + base(cur) : ''}${srv.name ? ' — IDE for Claude' : ''}`
+  if (document.title.startsWith('❓ ') || document.title.startsWith('✅ ')) return
+  document.title = t
+}
 const isChanged = (p) => srv.changes.some((c) => c.path === p)
 const agentOf = (p) => srv.changes.find((c) => c.path === p)?.agent || null
 /** petite étiquette : quel sous-agent, et par quel outil quand ce n'est pas Edit/Write */
@@ -723,7 +779,8 @@ async function renderTree() {
         },
       },
         h('span', { class: 'tw' }, isDir ? (open ? '▾' : '▸') : ''),
-        h('span', { class: 'label' }, (isDir ? '📁 ' : e.changed ? '✏️ ' : '📄 ') + e.name),
+        ficon(e.name, isDir, open),
+        h('span', { class: 'label' }, e.name),
         g ? h('span', { class: 'git ' + g, title: { M: 'modifié', A: 'ajouté', U: 'non suivi', D: 'supprimé', R: 'renommé', dot: 'contient des changements git' }[g] }, g === 'dot' ? '' : g) : null,
       )
       box.append(row)
@@ -768,6 +825,7 @@ function renderTabs() {
       onclick: () => openFile(p),
     },
       changed ? h('span', { class: 'mark' }, allOk ? '✅' : '✏️') : null,
+      ficon(base(p)),
       h('span', {}, base(p) + (dirty ? ' ●' : '')),
       !changed ? h('span', { class: 'x', onclick: (ev) => { ev.stopPropagation(); closeTab(p) } }, '×') : null,
     ))
@@ -910,7 +968,7 @@ function updateDirty() {
   const f = cur && files.get(cur)
   const dirty = !!(view.kind === 'file' && f && f.model.getValue() !== f.base)
   $('save').disabled = !dirty
-  document.title = `${dirty ? '● ' : ''}${cur ? base(cur) + ' · ' : ''}${srv.name} · IDE for Claude`
+  setTitle()
   renderTabs()
 }
 
@@ -1203,7 +1261,7 @@ function renderHistory() {
   if (touched.length) {
     box.append(h('div', { class: 'turn' },
       h('div', { class: 'head' }, h('b', {}, 'Toute la session'), h('span', { class: 't' }, `${touched.length} fichier${touched.length > 1 ? 's' : ''}`)),
-      touched.map((f) => h('div', { class: 'f' + (view.kind === 'session' && view.path === f.path ? ' cur' : ''), onclick: () => openTurn('session', f.path) }, h('span', {}, rel(f.path)))),
+      touched.map((f) => h('div', { class: 'f' + (view.kind === 'session' && view.path === f.path ? ' cur' : ''), onclick: () => openTurn('session', f.path) }, fname(f.path))),
     ))
   }
   for (const t of turns) {
@@ -1225,7 +1283,7 @@ function renderHistory() {
         title: f.inReview ? 'En revue' : pending.length ? 'Validé : sorti de la revue' : '',
         onclick: () => openTurn(t.id, f.path),
       },
-        h('span', {}, ((t.current || pending.length) && !f.inReview ? '✅ ' : f.isNew ? '🆕 ' : '') + f.rel, whoTag(f)),
+        h('span', { class: 'iname' }, ficon(base(f.rel)), h('span', {}, ((t.current || pending.length) && !f.inReview ? '✅ ' : f.isNew ? '🆕 ' : '') + f.rel, whoTag(f))),
         h('span', { class: 's' }, h('span', { class: 'add' }, `+${f.add}`), ' ', h('span', { class: 'del' }, `-${f.del}`)),
       )),
       acts.some(Boolean) ? h('div', { class: 'acts' }, acts) : null,
@@ -1323,6 +1381,7 @@ function renderRuns() {
         h('span', { class: 'acts' },
           running ? h('button', { title: 'Voir les logs', onclick: () => openRun(running.id) }, '🖥') : null,
           running ? h('button', { title: 'Arrêter', onclick: () => stopRun(running.id) }, '■') : h('button', { class: 'primary', title: 'Lancer', onclick: () => runCommand(c.command, c.name) }, '▶'),
+          h('button', { title: 'Lancer dans un vrai terminal', onclick: () => runInTerminal(c.command) }, '⧉'),
           h('button', { title: 'Modifier', onclick: () => editCommand(c) }, '✎'),
           h('button', { title: 'Supprimer', onclick: () => event({ type: 'command.delete', id: c.id }) }, '🗑'))),
       h('code', {}, c.command),
@@ -1339,6 +1398,7 @@ function renderRuns() {
         h('span', { class: 'acts' },
           h('button', { title: 'Ouvrir le terminal de cette commande (logs)', onclick: () => openRun(r.id) }, '🖥'),
           r.running ? h('button', { title: 'Arrêter', onclick: () => stopRun(r.id) }, '■') : h('button', { title: 'Relancer', onclick: () => runCommand(r.command, r.name) }, '↻'),
+          h('button', { title: 'Relancer dans un vrai terminal', onclick: () => runInTerminal(r.command) }, '⧉'),
           !r.running ? h('button', { title: 'Retirer de la liste', onclick: () => api('/api/run/forget', { method: 'POST', body: JSON.stringify({ id: r.id }) }) }, '✕') : null)),
       h('code', {}, `${fmtTime(r.started)} · ${r.command}`)))
   }
@@ -1351,6 +1411,7 @@ function renderRuns() {
     h('div', { class: 'top' }, h('span', { class: 'nm' }, x.name),
       h('span', { class: 'acts' },
         h('button', { title: 'Lancer', onclick: () => runCommand(x.command, x.name) }, '▶'),
+        h('button', { title: 'Lancer dans un vrai terminal', onclick: () => runInTerminal(x.command) }, '⧉'),
         h('button', { title: 'Enregistrer', onclick: () => event({ type: 'command.save', name: x.name, command: x.command }) }, '💾'))),
     h('code', {}, x.command)))
   if (view.kind === 'run') renderRunBar()
@@ -1371,6 +1432,14 @@ function saveCommand() {
   editingCmd = null
   $('saveForm').hidden = true
   $('saveName').value = ''
+}
+/** lance la commande telle quelle dans une fenêtre du terminal du système (iTerm, Terminal…), dans le dossier du projet */
+async function runInTerminal(command) {
+  command = (command || '').trim()
+  if (!command) return $('runCmd').focus()
+  const r = await api('/api/run/terminal', { method: 'POST', body: JSON.stringify({ command }) })
+  const d = await r.json().catch(() => ({}))
+  toast(r.ok ? `⧉ Lancée dans ${d.app}` : `Impossible d'ouvrir le terminal : ${d.error || r.status}`)
 }
 const stopRun = (id) => api('/api/run/stop', { method: 'POST', body: JSON.stringify({ id }) })
 
@@ -1488,7 +1557,7 @@ function renderAnns() {
   const byFile = new Map()
   for (const a of anns) byFile.set(a.path, [...(byFile.get(a.path) || []), a])
   for (const [p, list] of byFile) {
-    box.append(h('div', { class: 'annf', title: rel(p) }, `📄 ${rel(p)}`))
+    box.append(h('div', { class: 'annf', title: rel(p) }, fname(p)))
     for (const a of list.sort((x, y) => x.line - y.line))
       box.append(h('div', { class: 'ann', onclick: () => openFile(a.path, { line: a.line }) },
         h('span', { class: 'ln' }, `${a.line}${a.endLine ? '-' + a.endLine : ''}`), h('span', { class: 'note' }, a.note),
@@ -2425,7 +2494,7 @@ async function runSearch() {
   if (!results.length) return box.append(h('div', { class: 'hint' }, 'Aucun résultat.'))
   let last = null
   for (const m of results) {
-    if (m.path !== last) { box.append(h('div', { class: 'resf', title: m.rel }, m.rel)); last = m.path }
+    if (m.path !== last) { box.append(h('div', { class: 'resf', title: m.rel }, fname(m.rel, m.rel))); last = m.path }
     const i = m.col - 1
     box.append(h('div', { class: 'res', onclick: () => openFile(m.path, { line: m.line }) },
       `${m.line}  `, m.text.slice(Math.max(0, i - 30), i), h('mark', {}, m.text.slice(i, i + q.length)), m.text.slice(i + q.length, i + q.length + 80)))
@@ -2456,7 +2525,7 @@ function renderQo() {
     : [...new Set([...srv.changes.map((c) => c.path), ...tabs])].map((p) => ({ path: p, rel: rel(p) })).concat(qoFiles.slice(0, 40))
   qoSel = Math.min(qoSel, Math.max(0, list.length - 1))
   $('qoList').replaceChildren(...list.map((f, i) => h('div', { class: 'qo' + (i === qoSel ? ' cur' : ''), onclick: () => { closeQo(); openFile(f.path) } },
-    h('span', {}, base(f.rel)), h('span', { class: 'd' }, f.rel))))
+    fname(f.rel, base(f.rel)), h('span', { class: 'd' }, f.rel))))
   $('qoList').dataset.paths = JSON.stringify(list.map((f) => f.path))
 }
 function closeQo() { $('qo').classList.remove('show') }
@@ -2467,7 +2536,10 @@ async function refreshState() {
   if (!r.ok) return
   const prev = new Set(srv.changes.map((c) => c.path))
   srv = await r.json()
-  $('name').textContent = srv.name
+  $('name').replaceChildren(ficon(srv.name, true), srv.name)
+  $('name').title = srv.root
+  $('nameSep').hidden = !srv.name
+  setTitle()
   renderPromptImgs()
   if (!prefsLoaded) {
     if (srv.prefs && typeof srv.prefs === 'object') {
@@ -3418,7 +3490,9 @@ require(['vs/editor/editor.main'], async () => {
   $('allOk').onclick = () => acceptEverything()
   // exécuteur de commandes
   $('runGo').onclick = () => runCommand($('runCmd').value)
-  $('runCmd').onkeydown = (e) => { if (e.key === 'Enter') runCommand($('runCmd').value) }
+  $('runTerm').onclick = () => runInTerminal($('runCmd').value)
+  $('runTermBar').onclick = () => { const r = runs.get(view.id); if (r) runInTerminal(r.command) }
+  $('runCmd').onkeydown = (e) => { if (e.key === 'Enter') (e.shiftKey ? runInTerminal : runCommand)($('runCmd').value) }
   $('runSave').onclick = () => { editingCmd = null; $('saveForm').hidden = false; $('saveName').focus() }
   $('saveOk').onclick = () => saveCommand()
   $('saveName').onkeydown = (e) => { if (e.key === 'Enter') saveCommand(); if (e.key === 'Escape') $('saveForm').hidden = true }

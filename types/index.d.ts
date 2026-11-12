@@ -69,7 +69,7 @@ export type SubAgent = {
   end?: number
   /** nombre d'appels d'outils */
   tools: number
-  /** sa dernière action (« ✏️ modifie src/a.ts ») */
+  /** sa dernière action (« ✏ modifie src/a.ts ») */
   last?: string
   /** le début de sa réponse finale */
   answer?: string

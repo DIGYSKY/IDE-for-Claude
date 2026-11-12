@@ -43,6 +43,8 @@ On peut passer de l'une à l'autre : la touche `w` du panneau ouvre la page web 
 
 ## Le mode navigateur
 
+L'en-tête et le titre de l'onglet du navigateur portent le nom du projet (le chemin complet au survol de l'en-tête). Les fichiers et les dossiers ont les icônes de Material Icon Theme, comme dans VS Code : dans l'arbre, les onglets, `Mod+P`, la recherche, l'historique et les annotations. Hors ligne, des émojis les remplacent.
+
 ### Relire les modifs de Claude
 
 - Diff des modifications de Claude (une ou deux colonnes, lignes inchangées repliées)
@@ -119,7 +121,7 @@ La mod donne à Claude des outils à lui :
 - 💡 **Boîte à idées** (par projet) : ajouter, étiqueter, filtrer (nouvelles, en cours, faites), modifier d'un double-clic, ✍ mentionner dans le prompt, 📎 joindre au prochain prompt. Clic droit sur du code → 💡 (ou `Ctrl+Alt+I`) pour partir d'une sélection
 - 📍 **Annotations de Claude** : une liste par fichier ; un clic ouvre le fichier sur la ligne, surlignée avec un 📍 dans la marge
 - 🤖 **Sous-agents** : ceux que Claude lance pendant la session, en direct : la tâche, le type, la durée, le nombre d'outils et la dernière action ; un agent lancé par un autre se range sous lui. Un clic ouvre sa conversation : la consigne de Claude, ses outils et son rapport, mise à jour tant qu'il travaille
-- ▶ **Commandes** : taper une commande et la lancer, en enregistrer (par projet), relancer, arrêter. Plusieurs peuvent tourner en même temps, un serveur de dev par exemple. 🖥 ouvre le terminal d'une commande : sa sortie en direct, ■ Arrêter, ↻ Relancer, 📎 joindre la sortie pour Claude : il reçoit le chemin du journal complet de la commande et en lit ce qu'il lui faut. Les scripts de `package.json`, les tests détectés et les cibles du `Makefile` sont proposés
+- ▶ **Commandes** : taper une commande et la lancer, en enregistrer (par projet), relancer, arrêter. Plusieurs peuvent tourner en même temps, un serveur de dev par exemple. 🖥 ouvre le terminal d'une commande : sa sortie en direct, ■ Arrêter, ↻ Relancer, 📎 joindre la sortie pour Claude : il reçoit le chemin du journal complet de la commande et en lit ce qu'il lui faut. Les scripts de `package.json`, les tests détectés et les cibles du `Makefile` sont proposés. **⧉** (ou `Maj+Entrée` dans le champ) lance la commande telle quelle dans un vrai terminal du système, dans le dossier du projet, pour une commande qui pose des questions ou s'affiche en plein écran : sur macOS, iTerm si Claude Code y tourne, sinon Terminal (macOS demande une fois d'autoriser l'automatisation) ; sous Linux, le premier trouvé parmi gnome-terminal, konsole, xfce4-terminal, kitty, alacritty, x-terminal-emulator et xterm ; sous Windows, une fenêtre `cmd`. La fenêtre reste ouverte après la commande, et sa sortie n'est pas suivie par la page
 
 ### ⚙️ Paramètres
 
