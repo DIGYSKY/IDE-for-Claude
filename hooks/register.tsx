@@ -840,42 +840,30 @@ async function slashCommands($: $) {
 }
 
 // ---------- envoyer un prompt depuis la page : mentions, file d'attente ----------
-const MAX_INLINE = 30_000
-
-/** @fichier, @fichier:12-30, #i3 et /skill deviennent du contexte joint au prompt. */
+/**
+ * @fichier et @fichier:12-30 : seulement l'emplacement, Claude lit lui-même ce dont il a besoin.
+ * #i3 : l'idée est jointe en entier. /skill : rien à ajouter, le nom suffit à Claude.
+ */
 async function expandMentions($: $, raw: string) {
   const cwd = await $.session.cwd()
   const context: string[] = []
   const usedIdeas: string[] = []
-  const seen = new Set<string>()
+  const files: string[] = []
   for (const m of raw.matchAll(/(^|\s)@([^\s:]+)(?::(\d+)(?:-(\d+))?)?/g)) {
     const path = absOf(cwd, m[2]!)
-    const key = m[0].trim()
-    if (seen.has(key)) continue
-    seen.add(key)
-    const text = await readText($, path).catch(() => null)
-    if (text === null) continue
-    const rel = relTo(cwd, path)
-    if (m[3]) {
-      const a = Number(m[3])
-      const b = Math.max(a, Number(m[4] ?? m[3]))
-      const lines = text.split('\n').slice(a - 1, b).join('\n')
-      context.push(`${rel}, ligne${b > a ? `s ${a}-${b}` : ` ${a}`} (mentionné par l'utilisateur) :\n${fence(lines)}`)
-    } else if (text.length <= MAX_INLINE) context.push(`Contenu de ${rel} (mentionné par l'utilisateur) :\n${fence(text)}`)
-    else context.push(`Fichier mentionné par l'utilisateur : ${rel} (trop gros pour être joint, lis-le si besoin)`)
+    if (!(await $.fs.exists(path).catch(() => false))) continue
+    const a = m[3] ? Number(m[3]) : 0
+    const b = a ? Math.max(a, Number(m[4] ?? m[3])) : 0
+    const where = `${relTo(cwd, path)}${a ? (b > a ? `, lignes ${a}-${b}` : `, ligne ${a}`) : ''}`
+    if (!files.includes(where)) files.push(where)
   }
+  if (files.length) context.push(`Fichiers mentionnés (lis-les si besoin) :\n${files.map(f => `- ${f}`).join('\n')}`)
   const project = await getProject($)
   for (const m of raw.matchAll(/(^|\s)#i(\d+)\b/g)) {
     const idea = project.ideas.find(i => i.n === Number(m[2]))
     if (!idea || usedIdeas.includes(idea.id)) continue
     usedIdeas.push(idea.id)
     context.push(ideaText(cwd, idea))
-  }
-  const commands = await slashCommands($)
-  for (const m of raw.matchAll(/(^|\s)\/([\w:.-]+)/g)) {
-    if (m.index === 0 && raw.trimStart().startsWith('/')) continue
-    const c = commands.find(x => x.name === m[2])
-    if (c) context.push(`L'utilisateur mentionne /${c.name} (${c.description}). Sers-t'en si c'est pertinent.`)
   }
   return { context, usedIdeas }
 }

@@ -56,15 +56,15 @@ On peut passer de l'une à l'autre : la touche `w` du panneau ouvre la page web 
 ### Parler à Claude depuis la page
 
 - **Éditeur de prompt** en bas de la page, avec des suggestions dès que tu tapes `@`, `/` ou `#` :
-  - `@fichier` : le contenu du fichier est joint (au-delà de 30 Ko, seulement son nom)
-  - `@fichier:12-30` : ces lignes sont jointes ; `Ctrl+L` dans le code insère la sélection
-  - `/commande` : en tête de prompt, la commande ou le skill est lancé comme dans le terminal ; ailleurs, Claude est invité à s'en servir
-  - `#i3` : l'idée n° 3 de la boîte à idées est jointe et passe « en cours »
+  - `@fichier` : Claude reçoit l'emplacement du fichier et le lit lui-même s'il en a besoin (le contenu n'est pas recopié dans le prompt)
+  - `@fichier:12-30` : l'emplacement et les lignes ; `Ctrl+L` dans le code insère la sélection
+  - `/commande` : en tête de prompt, la commande ou le skill est lancé comme dans le terminal ; ailleurs, le nom suffit à Claude
+  - `#i3` : l'idée n° 3 de la boîte à idées est jointe en entier et passe « en cours »
 - `Ctrl+Entrée` envoie ; `↑` et `↓` rappellent les prompts déjà envoyés ; le brouillon est gardé
 - **File d'attente** : un prompt envoyé pendant que Claude travaille attend son tour et part quand Claude a fini. On peut le retirer, le reprendre dans l'éditeur ou l'envoyer tout de suite
 - **Plan de Claude** en direct, au-dessus de l'éditeur : sa liste de tâches, l'étape en cours, la progression
 
-Le contexte joint (lignes, fichiers, idées, revue) apparaît sous le prompt, dans le terminal aussi : Claude Code ne permet pas à une mod de le joindre à part pour un prompt qu'elle envoie.
+Le contexte joint (emplacements des fichiers, idées, revue) apparaît sous le prompt, dans le terminal aussi : Claude Code ne permet pas à une mod de le joindre à part pour un prompt qu'elle envoie.
 
 ### Les outils de Claude
 

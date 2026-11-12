@@ -123,9 +123,10 @@ test('un prompt envoyé pendant que Claude travaille attend son tour, puis part 
   stop()
   // le contexte suit le texte : $.prompt.submit n'en prend pas à part
   const p = sent.find(x => x.text.startsWith('explique'))!
-  expect(p.text).toContain('a.ts, lignes 2-3')
-  expect(p.text).toContain('l2\nl3')
-  expect(p.text).toContain('/review (Relit le code)')
+  // un fichier mentionné part avec son emplacement seulement : Claude le lit lui-même
+  expect(p.text).toContain('- a.ts, lignes 2-3')
+  expect(p.text).not.toContain('l2\nl3')
+  expect(p.text).not.toContain('Relit le code')
   // le prompt ouvre un tour dans l'historique, comme un prompt tapé
   expect((w.state.history as { prompt: string }[]).map(t => t.prompt)).toContain('explique @a.ts:2-3 avec /review')
   expect(w.state.queue).toEqual([])
