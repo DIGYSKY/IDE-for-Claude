@@ -27,6 +27,7 @@ On peut passer de l'une à l'autre : la touche `w` du panneau ouvre la page web 
 - Diff coloré avec coloration syntaxique, lignes inchangées repliées
 - Arbre du projet, avec les dossiers touchés par Claude mis en avant
 - Édition et sauvegarde directement dans le panneau
+- S'ouvre tout seul à la première modif de Claude (si la page web n'est pas ouverte). Une fois fermé (croix, Échap ou `q`), il ne se rouvre plus de la session avant un `/ide-for-claude`
 
 | Touche | Action |
 |---|---|

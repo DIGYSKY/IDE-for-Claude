@@ -21,6 +21,8 @@ const showTreeAtom = atom({ plugin: 'ide-for-claude', key: 'showTree' } as const
 const fullAtom = atom({ plugin: 'ide-for-claude', key: 'full' } as const, false, { shape: 'full-1' })
 const CONTEXT = 3
 const webAtom = atom({ plugin: 'ide-for-claude', key: 'web' } as const, null as { port: number; token: string } | null, { shape: 'web-1' })
+/** la personne a fermé le panneau : il ne se rouvre plus tout seul avant un /ide-for-claude */
+const paneClosedAtom = atom({ plugin: 'ide-for-claude', key: 'paneClosed' } as const, false, { shape: 'paneClosed-1' })
 
 const historyAtom = atom({ plugin: 'ide-for-claude', key: 'history' } as const, [] as Turn[], { shape: 'history-1' })
 const reviewAtom = atom({ plugin: 'ide-for-claude', key: 'review' } as const, [] as ReviewItem[], { shape: 'review-1' })
@@ -142,7 +144,7 @@ async function save($: $) {
   await update($, fileAtom, f => (f ? { ...f, saved: f.draft } : f))
   // le fichier est maintenant ta version : plus de surlignage Claude dessus
   await update($, changesAtom, list => list.filter(c => c.path !== file.path))
-  void pushChanges($)
+  void pushChanges($).catch(() => undefined)
   await update($, modeAtom, () => 'view' as Mode)
   await update($, noticeAtom, () => '💾 Sauvegardé (z pour annuler)')
 }
@@ -179,13 +181,13 @@ async function recordChange($: $, path: string, prior: string | null, after: str
     return [...list.filter(c => c.path !== path), old ?? { path, before, stale: false, agent: who.agent }]
   })
   await recordHistory($, path, prior, after, who)
-  void pushChanges($)
+  void pushChanges($).catch(() => undefined)
   const file = await read($, fileAtom)
   const isDirty = file !== null && file.draft !== file.saved
   if (file?.path === path && !isDirty) await update($, fileAtom, () => ({ path, saved: after, draft: after }))
   else if (file?.path === path) await update($, noticeAtom, () => '⚠️ Claude a modifié ce fichier pendant que tu l’éditais')
   else if (!isDirty) await openFile($, path)
-  if (!(await read($, webAtom))) void $.ui.open({ id: PANE, title: TITLE })
+  if (!(await read($, webAtom)) && !(await read($, paneClosedAtom))) void $.ui.open({ id: PANE, title: TITLE })
 }
 
 async function track<R>($: $, path: string, who: Who, run: () => Promise<R>): Promise<R> {
@@ -414,7 +416,7 @@ const newId = () => {
 
 async function addReview($: $, item: Omit<ReviewItem, 'id' | 'at'> & { id?: string }) {
   await update($, reviewAtom, list => [...list, { ...item, id: item.id ?? newId(), at: Date.now() }])
-  void pushChanges($)
+  void pushChanges($).catch(() => undefined)
 }
 
 const fence = (code: string) => {
@@ -447,7 +449,15 @@ async function reviewBlock($: $): Promise<string | null> {
 const prefsKey = (cwd: string) => `prefs:${cwd}`
 
 // ---------- serveur web (un par session, donc un par projet ouvert) ----------
+// `server` est le serveur que CETTE copie de la mod a lancé et dont elle lit la sortie.
+// Claude Code peut remplacer la copie en cours de session : la variable repart à null
+// alors que `webAtom` (l'état de la session) dit qu'une page est ouverte. Dans ce cas
+// le premier envoi relance le serveur sur le même port, avec la même clé : la page se reconnecte.
 let server: Promise<string> | null = null
+/** vrai dès que le serveur de cette copie écoute ; avant, il recevra tout l'état d'un coup */
+let ready = false
+/** dernier échec de démarrage : on ne relance pas le serveur à chaque appel d'outil s'il ne démarre pas */
+let failedAt = 0
 
 const randomToken = () => {
   const bytes = new Uint8Array(24)
@@ -457,7 +467,13 @@ const randomToken = () => {
 
 async function post($: $, route: string, payload: unknown) {
   const web = await read($, webAtom)
-  if (!web || !server) return
+  if (!web) return
+  if (!server) {
+    // la copie a changé : on reprend la main ; une fois prêt, le serveur reçoit tout l'état
+    if (Date.now() - failedAt > 30_000) void startWeb($).catch(() => undefined)
+    return
+  }
+  if (!ready) return
   await $.http
     .fetch(`http://127.0.0.1:${web.port}${route}`, {
       method: 'POST',
@@ -469,7 +485,7 @@ async function post($: $, route: string, payload: unknown) {
 
 /** Envoie au serveur tout l'état de la session : la page se met à jour en direct. */
 async function pushChanges($: $) {
-  if (!server) return
+  if (!(await read($, webAtom))) return
   const cwd = await $.session.cwd()
   await post($, '/api/push', {
     changes: (await read($, changesAtom)).map(c => ({ path: c.path, before: c.before, agent: c.agent })),
@@ -480,8 +496,8 @@ async function pushChanges($: $) {
   })
 }
 
-/** Un message pour la page seulement (activité, notification, toast). */
-const notify = ($: $, payload: Record<string, unknown>) => post($, '/api/notify', payload)
+/** Un message pour la page seulement (activité, notification, toast). Ne rejette jamais. */
+const notify = ($: $, payload: Record<string, unknown>) => post($, '/api/notify', payload).catch(() => undefined)
 
 type WebEvent = {
   type?: string
@@ -559,18 +575,26 @@ async function onWebEvent($: $, ev: WebEvent) {
     default:
       return
   }
-  void pushChanges($)
+  void pushChanges($).catch(() => undefined)
 }
 
 /** Démarre le serveur de cette session s'il ne tourne pas, et rend son adresse. */
 function startWeb($: $): Promise<string> {
   if (server) return server
+  ready = false
   server = (async () => {
     const cwd = await $.session.cwd()
     const prev = await read($, webAtom)
     const token = prev?.token ?? randomToken()
     const argv = ['node', `${$.plugin.root}/server/server.mjs`, '--root', cwd, '--token', token]
-    if (prev) argv.push('--port', String(prev.port))
+    if (prev) {
+      // un ancien serveur de la session peut encore tourner, lancé par une copie précédente
+      // de la mod : plus personne ne lit ce que la page lui envoie. On l'arrête et on reprend son port.
+      await $.http
+        .fetch(`http://127.0.0.1:${prev.port}/api/quit`, { method: 'POST', headers: { 'x-token': prev.token } })
+        .catch(() => undefined)
+      argv.push('--port', String(prev.port))
+    }
     const child = $.process.spawn({ argv })
     let resolvePort: (port: number) => void = () => undefined
     let rejectPort: (err: Error) => void = () => undefined
@@ -606,13 +630,24 @@ function startWeb($: $): Promise<string> {
       }
       rejectPort(new Error(errors.trim() || 'le serveur s’est arrêté'))
       server = null
+      ready = false
     })()
     const p = await port
     await update($, webAtom, () => ({ port: p, token }))
+    ready = true
     await pushChanges($)
-    return `http://127.0.0.1:${p}/?t=${token}`
+    const url = `http://127.0.0.1:${p}/?t=${token}`
+    // le port d'avant n'a pas pu être repris : l'onglet ouvert pointe dans le vide
+    if (prev && prev.port !== p) {
+      await update($, noticeAtom, () => `🌐 Page web déplacée : ${url}`)
+      void openBrowser($, url)
+    }
+    return url
   })()
-  server.catch(() => (server = null))
+  server.catch(() => {
+    server = null
+    failedAt = Date.now()
+  })
   return server
 }
 
@@ -626,18 +661,22 @@ async function onWebSave($: $, path: string, dropHighlight = true) {
   }
 }
 
+/** xdg-open sous Linux, open sous macOS ; l'URL passe en argument, jamais dans le script.
+ *  Sans sh (Windows), rundll32 ouvre l'URL dans le navigateur par défaut, sans passer par cmd. */
+async function openBrowser($: $, url: string) {
+  const opener = 'if command -v xdg-open >/dev/null 2>&1; then exec xdg-open "$1"; else exec open "$1"; fi'
+  await $.process
+    .run(['sh', '-c', opener, 'sh', url])
+    .catch(() => $.process.run(['rundll32', 'url.dll,FileProtocolHandler', url]))
+    .catch(() => undefined)
+}
+
 async function openWeb($: $): Promise<string> {
   try {
     const url = await startWeb($)
     const file = await read($, fileAtom)
     const full = file ? `${url}#${encodeURIComponent(file.path)}` : url
-    // xdg-open sous Linux, open sous macOS ; l'URL passe en argument, jamais dans le script.
-    // Sans sh (Windows), rundll32 ouvre l'URL dans le navigateur par défaut, sans passer par cmd.
-    const opener = 'if command -v xdg-open >/dev/null 2>&1; then exec xdg-open "$1"; else exec open "$1"; fi'
-    await $.process
-      .run(['sh', '-c', opener, 'sh', full])
-      .catch(() => $.process.run(['rundll32', 'url.dll,FileProtocolHandler', full]))
-      .catch(() => undefined)
+    await openBrowser($, full)
     return full
   } catch (err) {
     await update($, noticeAtom, () => `⚠️ Serveur web : ${String((err as Error)?.message ?? err)}`)
@@ -684,6 +723,7 @@ export const register: Register = on => {
   on('command.run', { command: 'ide-for-claude' }, async ($, e) => {
     const arg = e.args.trim()
     if (arg) await openFile($, absOf(await $.session.cwd(), arg))
+    await update($, paneClosedAtom, () => false)
     await $.ui.open({ id: PANE, title: TITLE, focus: true })
     return { text: 'IDE for Claude ouvert.' }
   })
@@ -705,11 +745,11 @@ export const register: Register = on => {
     const block = await reviewBlock($)
     if (block) {
       await update($, reviewAtom, () => [])
-      void pushChanges($)
+      void pushChanges($).catch(() => undefined)
       void notify($, { type: 'toast', text: '📨 Review jointe à ton prompt' })
       return next({ ...e, context: [...(e.context ?? []), block] })
     }
-    void pushChanges($)
+    void pushChanges($).catch(() => undefined)
     return next(e)
   })
 
@@ -728,9 +768,15 @@ export const register: Register = on => {
     return result
   })
 
+  // fermé à la croix, par Échap ou par « Quitter » : on ne le rouvre plus tout seul
+  on('ui.close', async ($, e, next) => {
+    if (e.id === PANE && e.origin.kind !== 'unload') await update($, paneClosedAtom, () => true)
+    return next(e)
+  })
+
   // activité en direct, et fin de tour pour la notification
   on('tool.call', async ($, e, next) => {
-    if (!server) return next(e)
+    if (!(await read($, webAtom))) return next(e)
     const cwd = await $.session.cwd()
     void notify($, { type: 'activity', label: activityLabel(cwd, e as unknown as { tool: string } & Record<string, unknown>) })
     try {
@@ -742,7 +788,7 @@ export const register: Register = on => {
 
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
-    if (server && e.agentId === undefined) void notify($, { type: 'done' })
+    if (e.agentId === undefined && (await read($, webAtom))) void notify($, { type: 'done' })
     return done
   })
 
@@ -928,7 +974,15 @@ export const register: Register = on => {
         {file && <Button key="reload" hotkey="r" plain onPress={() => void openFile($, file.path)}>Recharger</Button>}
         {hasUndo && <Button key="undo" hotkey="z" plain onPress={() => void undoSave($)}>Annuler sauvegarde</Button>}
         <Button key="web" hotkey="w" plain onPress={() => void openWeb($).catch(() => undefined)}>Navigateur</Button>
-        <Button key="quit" hotkey="q" plain onPress={() => void $.ui.close({ id: PANE })}>Quitter</Button>
+        <Button
+          key="quit"
+          hotkey="q"
+          plain
+          // notre propre $.ui.close ne passe pas par notre hook ui.close : on note la fermeture ici
+          onPress={() => void update($, paneClosedAtom, () => true).then(() => $.ui.close({ id: PANE }))}
+        >
+          Quitter
+        </Button>
       </Box>
     )
 

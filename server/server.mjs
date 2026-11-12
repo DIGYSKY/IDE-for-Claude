@@ -444,6 +444,16 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true })
     }
 
+    // une nouvelle copie de la mod reprend la session : elle arrête ce serveur pour reprendre son port
+    if (route === 'POST /api/quit') {
+      json(res, 200, { ok: true })
+      stopTests()
+      server.close()
+      for (const r of clients) r.destroy()
+      setTimeout(() => process.exit(0), 50)
+      return
+    }
+
     if (route === 'GET /api/tests') return json(res, 200, { ...testsState(), suggested: await suggestTests() })
 
     if (route === 'POST /api/tests/run') {
@@ -494,7 +504,21 @@ const listen = (port) =>
     server.listen(port, '127.0.0.1', () => resolve(server.address().port))
   })
 
-PORT = await listen(Number(args.port) || 0).catch(() => listen(0))
+// le port demandé (celui de la page déjà ouverte) peut être encore tenu un instant par
+// l'ancien serveur qui s'arrête : on réessaie quelques secondes avant d'en prendre un autre
+const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+async function listenPreferred(port) {
+  for (let i = 0; i < 20; i++) {
+    try {
+      return await listen(port)
+    } catch (e) {
+      if (e?.code !== 'EADDRINUSE') break
+      await wait(150)
+    }
+  }
+  return listen(0)
+}
+PORT = await (Number(args.port) ? listenPreferred(Number(args.port)) : listen(0))
 console.log(JSON.stringify({ port: PORT }))
 
 for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP'])

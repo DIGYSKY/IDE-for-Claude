@@ -34,6 +34,8 @@ declare module 'claude-code' {
       history: Shaped<Turn[]>
       review: Shaped<ReviewItem[]>
       accepted: Shaped<string[]>
+      /** la personne a fermé le panneau : plus d'ouverture automatique */
+      paneClosed: Shaped<boolean>
     }
   }
 }
