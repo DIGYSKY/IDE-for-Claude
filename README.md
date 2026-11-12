@@ -2,7 +2,15 @@
 
 Mod Claude Code : un IDE pour suivre, relire et commenter les modifications de Claude, sans quitter la session.
 
-Pendant que Claude travaille, IDE for Claude note chaque fichier qu'il touche (`Edit`, `Write`), garde la version d'avant et affiche le diff. Tu relis, tu acceptes, tu rejettes ou tu commentes : ta review part avec ton prochain prompt.
+Pendant que Claude travaille, IDE for Claude note chaque fichier qu'il touche, garde la version d'avant et affiche le diff. Tu relis, tu acceptes, tu rejettes ou tu commentes : ta review part avec ton prochain prompt.
+
+## Ce qui est suivi
+
+- `Edit`, `Write` et `NotebookEdit` : chaque fichier touché, avec son contenu d'avant.
+- `Bash` : les fichiers créés ou modifiés par une commande (`sed -i`, `mv`, un formateur, un script…). Dans un dépôt git, la mod compare `git status` avant et après la commande ; ailleurs, elle parcourt le projet (jusqu'à 2 000 fichiers). Un fichier supprimé est signalé, sans diff.
+- Les sous-agents : chaque modif indique l'agent qui l'a faite, dans l'historique et au survol des onglets.
+
+Limites : une commande lancée en arrière-plan n'est vue que pour ce qu'elle a changé avant de rendre la main. Un fichier que tu modifies toi-même pendant qu'une commande Bash tourne est compté comme une modif de Claude.
 
 ## Deux interfaces
 
@@ -38,7 +46,8 @@ On peut passer de l'une à l'autre : la touche `w` du panneau ouvre la page web 
 - Review façon GitHub : ✅ accepter (visuel), ❌ rejeter un bloc ou un fichier, 💬 commenter une ligne
 - `Ctrl+L` : joindre la sélection pour Claude
 - Commentaires, rejets et extraits partent discrètement avec le prochain prompt, ou avec « Envoyer maintenant »
-- Historique prompt par prompt, diff de toute la session, ↶ revenir avant un prompt
+- Historique prompt par prompt, diff de toute la session, ↶ revenir avant un prompt ; chaque fichier indique le sous-agent (🤖) et l'outil (⚙️ Bash, 📓 notebook) quand ce n'est pas Claude avec `Edit`/`Write`
+- 🧪 Tests : lancer la commande de test du projet (devinée : `npm test`, `pytest`, `cargo test`, `go test ./...`, `make test`…, modifiable et gardée par projet), voir la sortie en direct, puis 📎 joindre le résultat pour Claude
 - Badges git et comparaison avec `git HEAD`
 - Activité de Claude en direct, son et notification de fin
 - Préférences gardées par projet
@@ -58,7 +67,7 @@ Sur macOS, `Cmd` marche à la place de `Ctrl`.
 - Claude Code 2.1.275 ou plus récent (installation en une commande, mods / hooks modules)
 - Node.js 18 ou plus récent pour le mode navigateur
 - Internet pour charger Monaco depuis le CDN jsDelivr
-- `xdg-open` (Linux) ou `open` (macOS) pour ouvrir le navigateur automatiquement. Ailleurs, copier l'adresse affichée par `/ide-for-claude-web`
+- Ouverture automatique du navigateur : `xdg-open` (Linux), `open` (macOS) ou `rundll32` (Windows). Sinon, copier l'adresse affichée par `/ide-for-claude-web`
 
 ## Installation
 
@@ -114,7 +123,7 @@ Chaque session Claude lance son propre serveur local, sans dépendance :
 - il refuse les requêtes dont l'en-tête `Host` n'est pas `127.0.0.1` ou `localhost` ;
 - il ne lit et n'écrit que dans le dossier du projet.
 
-Plusieurs projets peuvent donc tourner en même temps. Ne partage pas l'adresse complète : la clé donne accès en lecture et en écriture aux fichiers du projet.
+Plusieurs projets peuvent donc tourner en même temps. Ne partage pas l'adresse complète : la clé donne accès en lecture et en écriture aux fichiers du projet, et permet de lancer une commande de test dans le dossier du projet.
 
 ## Tests
 

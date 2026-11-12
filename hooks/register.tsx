@@ -158,19 +158,27 @@ async function undoSave($: $) {
 }
 
 // ---------- suivi des modifs de Claude ----------
-async function track<R>($: $, path: string, run: () => Promise<R>): Promise<R> {
-  const prior = await readText($, path).catch(() => null)
-  const before = prior ?? ''
-  const result = await run()
-  const after = await readText($, path).catch(() => null)
-  if (after === null || after === before) return result
+type Who = { agent?: string; via?: string }
 
+/** Le nom lisible du sous-agent qui fait l'appel, ou rien pour Claude lui-même. */
+async function agentLabel($: $, agentId: string | undefined): Promise<string | undefined> {
+  if (agentId === undefined) return undefined
+  const info = (await $.agent.list().catch(() => [])).find(a => a.id === agentId)
+  if (!info) return 'sous-agent'
+  const who = info.name ?? info.type
+  return info.description ? `${who} · ${info.description}` : who
+}
+
+/** Une modif constatée : surlignage, historique, panneau et page web. */
+async function recordChange($: $, path: string, prior: string | null, after: string, who: Who) {
+  const before = prior ?? ''
+  if (after === before && prior !== null) return
   // le surlignage montre tout ce que Claude a changé depuis ton dernier prompt
   await update($, changesAtom, list => {
     const old = list.find(c => c.path === path && !c.stale)
-    return [...list.filter(c => c.path !== path), old ?? { path, before, stale: false }]
+    return [...list.filter(c => c.path !== path), old ?? { path, before, stale: false, agent: who.agent }]
   })
-  await recordHistory($, path, prior, after)
+  await recordHistory($, path, prior, after, who)
   void pushChanges($)
   const file = await read($, fileAtom)
   const isDirty = file !== null && file.draft !== file.saved
@@ -178,7 +186,163 @@ async function track<R>($: $, path: string, run: () => Promise<R>): Promise<R> {
   else if (file?.path === path) await update($, noticeAtom, () => '⚠️ Claude a modifié ce fichier pendant que tu l’éditais')
   else if (!isDirty) await openFile($, path)
   if (!(await read($, webAtom))) void $.ui.open({ id: PANE, title: TITLE })
+}
+
+async function track<R>($: $, path: string, who: Who, run: () => Promise<R>): Promise<R> {
+  const prior = await readText($, path).catch(() => null)
+  const result = await run()
+  const after = await readText($, path).catch(() => null)
+  if (after !== null && after !== (prior ?? '')) await recordChange($, path, prior, after, who)
   return result
+}
+
+// ---------- modifs faites par Bash (sed -i, mv, scripts, formateurs...) ----------
+// Avant la commande, on photographie ce qui peut changer ; après, on compare.
+// Dans un dépôt git : les fichiers déjà modifiés (leur contenu) + git HEAD pour les autres.
+// Hors git : un parcours du projet, avec un cache des contenus par date de modification.
+const MAX_SNAP_FILES = 2000
+const MAX_SNAP_BYTES = 30_000_000
+
+type Snapshot =
+  | { kind: 'git'; top: string; dirty: Map<string, string | null> }
+  | { kind: 'scan'; files: Map<string, { mtimeMs: number; size: number }>; complete: boolean }
+
+let gitTop: { cwd: string; top: string | null } | null = null
+async function gitTopOf($: $, cwd: string): Promise<string | null> {
+  if (gitTop?.cwd === cwd) return gitTop.top
+  const r = await $.process.run(['git', '-C', cwd, 'rev-parse', '--show-toplevel']).catch(() => null)
+  const top = r && r.exitCode === 0 ? r.stdout.trim() || null : null
+  gitTop = { cwd, top }
+  return top
+}
+
+/** Les fichiers que git voit modifiés, ajoutés ou non suivis (chemins absolus). */
+async function gitDirty($: $, top: string): Promise<string[] | null> {
+  const r = await $.process
+    .run(['git', '-C', top, 'status', '--porcelain=v1', '-z', '--untracked-files=all'], { timeoutMs: 15_000 })
+    .catch(() => null)
+  if (!r || r.exitCode !== 0) return null
+  const out: string[] = []
+  const parts = r.stdout.split('\0')
+  for (let i = 0; i < parts.length; i++) {
+    const entry = parts[i]!
+    if (entry.length < 4) continue
+    const x = entry[0]
+    out.push(`${top}/${entry.slice(3)}`)
+    // un renommage donne aussi l'ancien chemin dans l'entrée suivante
+    if (x === 'R' || x === 'C') out.push(`${top}/${parts[++i] ?? ''}`)
+  }
+  return out
+}
+
+async function gitHead($: $, top: string, path: string): Promise<string | null> {
+  const r = await $.process
+    .run(['git', '-C', top, 'show', `HEAD:${path.slice(top.length + 1)}`], { timeoutMs: 15_000 })
+    .catch(() => null)
+  if (!r || r.exitCode !== 0 || r.isStdoutTruncated || r.stdout.includes('\u0000')) return null
+  return r.stdout
+}
+
+/** Contenus connus hors git, par chemin : relus seulement quand la date ou la taille change. */
+const scanCache = new Map<string, { mtimeMs: number; size: number; text: string | null }>()
+
+async function scanProject($: $, cwd: string) {
+  const files = new Map<string, { mtimeMs: number; size: number }>()
+  let complete = true
+  const walk = async (dir: string): Promise<void> => {
+    const entries = await $.fs.list(dir).catch(() => [])
+    for (const x of entries) {
+      if (HIDDEN.has(x.name) || x.isLink) continue
+      const path = `${dir}/${x.name}`
+      if (x.kind === 'dir') await walk(path)
+      else if (x.kind === 'file') {
+        if (files.size >= MAX_SNAP_FILES) {
+          complete = false
+          return
+        }
+        files.set(path, { mtimeMs: x.mtimeMs, size: x.size })
+      }
+    }
+  }
+  await walk(cwd)
+  return { files, complete }
+}
+
+async function cachedText($: $, path: string, st: { mtimeMs: number; size: number }) {
+  const hit = scanCache.get(path)
+  if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.text
+  const text = st.size > MAX_BYTES ? null : await readText($, path).catch(() => null)
+  scanCache.set(path, { ...st, text })
+  return text
+}
+
+async function snapshot($: $): Promise<Snapshot | null> {
+  const cwd = await $.session.cwd()
+  const top = await gitTopOf($, cwd)
+  if (top) {
+    const paths = await gitDirty($, top)
+    if (!paths) return null
+    const dirty = new Map<string, string | null>()
+    for (const p of paths.slice(0, MAX_SNAP_FILES)) {
+      const st = await $.fs.stat(p).catch(() => null)
+      dirty.set(p, st && st.kind === 'file' ? await cachedText($, p, st) : null)
+    }
+    return { kind: 'git', top, dirty }
+  }
+  const { files, complete } = await scanProject($, cwd)
+  // on remplit le cache tant que le budget le permet : c'est l'état « avant »
+  let bytes = 0
+  for (const [p, st] of files) {
+    if ((bytes += st.size) > MAX_SNAP_BYTES) break
+    await cachedText($, p, st)
+  }
+  return { kind: 'scan', files, complete }
+}
+
+/** Compare avec la photo d'avant et enregistre ce que la commande a changé. */
+async function diffSnapshot($: $, snap: Snapshot, who: Who) {
+  const found: { path: string; prior: string | null; after: string | null }[] = []
+  const unknown: string[] = []
+  if (snap.kind === 'git') {
+    const now = (await gitDirty($, snap.top)) ?? []
+    for (const p of new Set([...snap.dirty.keys(), ...now])) {
+      const prior = snap.dirty.has(p) ? snap.dirty.get(p)! : await gitHead($, snap.top, p)
+      const after = await readText($, p).catch(() => null)
+      if (after !== prior) found.push({ path: p, prior, after })
+    }
+  } else {
+    const cwd = await $.session.cwd()
+    const { files } = await scanProject($, cwd)
+    for (const [p, st] of files) {
+      const old = snap.files.get(p)
+      if (old && old.mtimeMs === st.mtimeMs && old.size === st.size) continue
+      const known = scanCache.get(p)
+      const prior = old ? (known && known.mtimeMs === old.mtimeMs && known.size === old.size ? known.text : undefined) : null
+      const after = await cachedText($, p, st)
+      // modifié, mais on n'avait pas son contenu d'avant (projet trop gros) : pas de diff possible
+      if (prior === undefined) unknown.push(p)
+      else if (after !== prior) found.push({ path: p, prior, after })
+    }
+    for (const p of snap.files.keys()) if (!files.has(p)) found.push({ path: p, prior: scanCache.get(p)?.text ?? null, after: null })
+  }
+  const gone: string[] = []
+  for (const f of found) {
+    if (f.after === null) {
+      if (f.prior !== null) gone.push(f.path)
+      continue
+    }
+    await recordChange($, f.path, f.prior, f.after, who)
+  }
+  const cwd = await $.session.cwd()
+  if (unknown.length) {
+    const list = unknown.map(p => relTo(cwd, p)).join(', ')
+    await update($, noticeAtom, () => `⚠️ Modifié par Bash, sans diff (projet trop gros) : ${cut(list, 200)}`)
+  }
+  if (gone.length) {
+    const list = gone.map(p => relTo(cwd, p)).join(', ')
+    await update($, noticeAtom, () => `🗑️ Supprimé par Bash : ${cut(list, 200)}`)
+    void notify($, { type: 'toast', text: `🗑️ Claude a supprimé ${gone.length > 1 ? `${gone.length} fichiers` : list} avec Bash` })
+  }
 }
 
 // ---------- historique prompt par prompt ----------
@@ -194,15 +358,15 @@ async function newTurn($: $, prompt: string) {
   })
 }
 
-async function recordHistory($: $, path: string, prior: string | null, after: string) {
+async function recordHistory($: $, path: string, prior: string | null, after: string, who: Who) {
   if ((prior?.length ?? 0) + after.length > MAX_HIST_BYTES) return
   await update($, historyAtom, list => {
     const turns = list.length ? list : [{ id: 1, prompt: '(avant le premier prompt)', at: Date.now(), files: [] }]
     const last = turns[turns.length - 1]!
     const old = last.files.find(f => f.path === path)
     const files: HistFile[] = old
-      ? last.files.map(f => (f.path === path ? { ...f, after } : f))
-      : [...last.files, { path, before: prior, after }]
+      ? last.files.map(f => (f.path === path ? { ...f, after, agent: f.agent ?? who.agent, via: f.via ?? who.via } : f))
+      : [...last.files, { path, before: prior, after, ...(who.agent ? { agent: who.agent } : {}), ...(who.via ? { via: who.via } : {}) }]
     return [...turns.slice(0, -1), { ...last, files }]
   })
 }
@@ -267,6 +431,7 @@ async function reviewBlock($: $): Promise<string | null> {
     if (it.kind === 'reject')
       return `${i + 1}. ${where} : BLOC REJETÉ. L'utilisateur a remis le code d'avant.${it.code ? `\n   Ton code rejeté :\n${fence(it.code)}` : ''}${it.text ? `\n   Commentaire : ${it.text}` : ''}`
     if (it.kind === 'restore') return `${i + 1}. ${it.text}`
+    if (it.kind === 'tests') return `${i + 1}. ${it.text}${it.code ? `\n${fence(it.code)}` : ''}`
     if (it.kind === 'snippet')
       return `${i + 1}. ${where} : extrait de code partagé par l'utilisateur :\n${fence(it.code ?? '')}${it.text ? `\n   Note : ${it.text}` : ''}`
     return `${i + 1}. ${where}${it.code ? `, sur :\n${fence(it.code)}` : ''}\n   Commentaire : ${it.text}`
@@ -307,7 +472,7 @@ async function pushChanges($: $) {
   if (!server) return
   const cwd = await $.session.cwd()
   await post($, '/api/push', {
-    changes: (await read($, changesAtom)).map(c => ({ path: c.path, before: c.before })),
+    changes: (await read($, changesAtom)).map(c => ({ path: c.path, before: c.before, agent: c.agent })),
     history: await read($, historyAtom),
     review: await read($, reviewAtom),
     accepted: await read($, acceptedAtom),
@@ -382,6 +547,11 @@ async function onWebEvent($: $, ev: WebEvent) {
       if (!ev.path || !ev.code) break
       await addReview($, { kind: 'snippet', path: ev.path, line: ev.startLine, endLine: ev.endLine, code: ev.code, text: ev.text ?? '' })
       await notify($, { type: 'toast', text: '📎 Extrait ajouté : il partira avec ton prochain prompt' })
+      break
+    case 'tests':
+      // la sortie d'un lancement de tests, jointe depuis la page
+      await addReview($, { kind: 'tests', text: ev.text ?? 'Résultat des tests', code: ev.code })
+      await notify($, { type: 'toast', text: '🧪 Résultat des tests ajouté : il partira avec ton prochain prompt' })
       break
     case 'prefs':
       await $.store.set(prefsKey(cwd), ev.prefs ?? null)
@@ -461,9 +631,13 @@ async function openWeb($: $): Promise<string> {
     const url = await startWeb($)
     const file = await read($, fileAtom)
     const full = file ? `${url}#${encodeURIComponent(file.path)}` : url
-    // xdg-open sous Linux, open sous macOS ; l'URL passe en argument, jamais dans le script
+    // xdg-open sous Linux, open sous macOS ; l'URL passe en argument, jamais dans le script.
+    // Sans sh (Windows), rundll32 ouvre l'URL dans le navigateur par défaut, sans passer par cmd.
     const opener = 'if command -v xdg-open >/dev/null 2>&1; then exec xdg-open "$1"; else exec open "$1"; fi'
-    await $.process.run(['sh', '-c', opener, 'sh', full]).catch(() => undefined)
+    await $.process
+      .run(['sh', '-c', opener, 'sh', full])
+      .catch(() => $.process.run(['rundll32', 'url.dll,FileProtocolHandler', full]))
+      .catch(() => undefined)
     return full
   } catch (err) {
     await update($, noticeAtom, () => `⚠️ Serveur web : ${String((err as Error)?.message ?? err)}`)
@@ -539,8 +713,20 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('tool.call', { tool: 'Edit' }, async ($, e, next) => track($, e.file_path, () => next(e)))
-  on('tool.call', { tool: 'Write' }, async ($, e, next) => track($, e.file_path, () => next(e)))
+  on('tool.call', { tool: 'Edit' }, async ($, e, next) => track($, e.file_path, { agent: await agentLabel($, e.agentId) }, () => next(e)))
+  on('tool.call', { tool: 'Write' }, async ($, e, next) => track($, e.file_path, { agent: await agentLabel($, e.agentId) }, () => next(e)))
+  on('tool.call', { tool: 'NotebookEdit' }, async ($, e, next) =>
+    track($, e.notebook_path, { agent: await agentLabel($, e.agentId), via: 'NotebookEdit' }, () => next(e)),
+  )
+
+  // Bash : photo avant, comparaison après. Une commande lancée en arrière-plan
+  // n'est vue que pour ce qu'elle a changé avant de rendre la main.
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    const snap = await snapshot($).catch(() => null)
+    const result = await next(e)
+    if (snap) await diffSnapshot($, snap, { agent: await agentLabel($, e.agentId), via: 'Bash' }).catch(() => undefined)
+    return result
+  })
 
   // activité en direct, et fin de tour pour la notification
   on('tool.call', async ($, e, next) => {

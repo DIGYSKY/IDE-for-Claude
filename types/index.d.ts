@@ -1,13 +1,15 @@
 export type OpenFile = { path: string; saved: string; draft: string }
 /** `before` : le fichier avant les modifs de Claude du dernier prompt ; `stale` : un nouveau prompt est parti depuis */
-export type Change = { path: string; before: string; stale: boolean }
+/** `agent` : le sous-agent qui a fait la modif (absent pour Claude lui-même) */
+export type Change = { path: string; before: string; stale: boolean; agent?: string }
 export type Mode = 'view' | 'edit'
 /** un fichier touché pendant un prompt : `before` null si Claude l'a créé */
-export type HistFile = { path: string; before: string | null; after: string }
+/** `via` : l'outil qui a fait la modif quand ce n'est pas Edit/Write (Bash, NotebookEdit) */
+export type HistFile = { path: string; before: string | null; after: string; agent?: string; via?: string }
 export type Turn = { id: number; prompt: string; at: number; files: HistFile[] }
 export type ReviewItem = {
   id: string
-  kind: 'comment' | 'reject' | 'restore' | 'snippet'
+  kind: 'comment' | 'reject' | 'restore' | 'snippet' | 'tests'
   path?: string
   line?: number
   endLine?: number

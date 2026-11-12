@@ -112,6 +112,18 @@
   .mi-plus::before { content: '+'; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin: 1px 0 0 2px;
     border-radius: 4px; background: var(--accent); color: #fff; font: bold 13px/1 system-ui, sans-serif; }
 
+  /* qui a modifié : sous-agent, Bash, notebook */
+  .who-tag { font-size: 10px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-left: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; display: inline-block; vertical-align: middle; }
+  /* tests */
+  #p-tests .row { display: flex; gap: 6px; padding: 6px 10px; }
+  #p-tests input { flex: 1; min-width: 0; font: 12px ui-monospace, monospace; }
+  #testsStatus { padding: 2px 12px 6px; font-size: 12px; }
+  #testsStatus.ok { color: var(--ok); } #testsStatus.bad { color: var(--bad); }
+  #testsOut { margin: 0 8px 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
+    font: 11px/1.45 ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; max-height: calc(100vh - 230px); overflow: auto; }
+  #testsOut:empty { display: none; }
+
   /* panneaux latéraux */
   .item { margin: 4px 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); cursor: pointer; }
   .item:hover { border-color: var(--accent); }
@@ -167,6 +179,7 @@
       <button data-p="search" title="Rechercher (Ctrl+Shift+F)">🔎</button>
       <button data-p="history" title="Historique des prompts">🕓<span class="n" id="nHist" hidden></span></button>
       <button data-p="review" title="Review pour Claude">💬<span class="n" id="nRev" hidden></span></button>
+      <button data-p="tests" title="Lancer les tests">🧪<span class="n" id="nTests" hidden></span></button>
     </div>
     <div class="panel" id="p-files"><div id="tree"></div></div>
     <div class="panel" id="p-search">
@@ -175,6 +188,13 @@
     </div>
     <div class="panel" id="p-history"><div id="history"></div></div>
     <div class="panel" id="p-review"><div id="review"></div></div>
+    <div class="panel" id="p-tests">
+      <div class="row"><input type="text" id="testsCmd" placeholder="Commande de test (ex. npm test)" spellcheck="false">
+        <button id="testsRun" class="primary" title="Lancer">▶</button><button id="testsStop" title="Arrêter" hidden>■</button></div>
+      <div id="testsStatus" class="hint"></div>
+      <div class="row" id="testsActs" hidden><button id="testsSend" style="width:100%">📎 Joindre le résultat pour Claude</button></div>
+      <pre id="testsOut"></pre>
+    </div>
   </aside>
   <div id="split"></div>
   <main>
@@ -256,13 +276,19 @@ const files = new Map()   // chemin -> { base, before, model, original }
 let tabs = []
 let cur = null
 let view = { kind: 'file' } // ou { kind: 'turn', id } / { kind: 'session' }
-let P = { sideBySide: false, fold: true, side: 280, panel: 'files', notify: false, compare: 'claude', expanded: [], collapsed: [], views: {} }
+let P = { sideBySide: false, fold: true, side: 280, panel: 'files', notify: false, compare: 'claude', expanded: [], collapsed: [], views: {}, testCmd: '' }
 let prefsLoaded = false
 let monaco, editor, diff
 
 const rel = (p) => (p.startsWith(srv.root + srv.sep) ? p.slice(srv.root.length + 1) : p)
 const base = (p) => p.split(/[\\/]/).pop()
 const isChanged = (p) => srv.changes.some((c) => c.path === p)
+const agentOf = (p) => srv.changes.find((c) => c.path === p)?.agent || null
+/** petite étiquette : quel sous-agent, et par quel outil quand ce n'est pas Edit/Write */
+const whoTag = (f) => {
+  const parts = [f.agent ? '🤖 ' + f.agent : null, f.via === 'Bash' ? '⚙️ Bash' : f.via === 'NotebookEdit' ? '📓 notebook' : null].filter(Boolean)
+  return parts.length ? h('span', { class: 'who-tag', title: parts.join(' · ') }, parts.join(' · ')) : null
+}
 const status = (t) => ($('status').textContent = t)
 const hash = (s) => { let x = 5381; for (let i = 0; i < s.length; i++) x = ((x << 5) + x + s.charCodeAt(i)) | 0; return (x >>> 0).toString(36) }
 const fmtTime = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -376,7 +402,7 @@ function renderTabs() {
     const allOk = changed && f && f.hunks && f.hunks.length > 0 && f.hunks.every((k) => srv.accepted.includes(k))
     box.append(h('div', {
       class: 'tab' + (p === cur && view.kind === 'file' ? ' cur' : '') + (allOk ? ' ok' : ''),
-      title: rel(p),
+      title: rel(p) + (agentOf(p) ? ` · modifié par ${agentOf(p)}` : ''),
       onclick: () => openFile(p),
     },
       changed ? h('span', { class: 'mark' }, allOk ? '✅' : '✏️') : null,
@@ -738,7 +764,7 @@ function renderHistory() {
       h('div', { class: 'head' }, h('b', {}, `Prompt ${t.id}`), h('span', { class: 't' }, fmtTime(t.at))),
       h('div', { class: 'prompt', title: t.prompt }, t.prompt || '(sans texte)'),
       t.files.map((f) => h('div', { class: 'f' + (view.kind === 'turn' && view.id === t.id && view.path === f.path ? ' cur' : ''), onclick: () => openTurn(t.id, f.path) },
-        h('span', {}, (f.isNew ? '🆕 ' : '') + f.rel),
+        h('span', {}, (f.isNew ? '🆕 ' : '') + f.rel, whoTag(f)),
         h('span', { class: 's' }, h('span', { class: 'add' }, `+${f.add}`), ' ', h('span', { class: 'del' }, `-${f.del}`)),
       )),
       h('div', { class: 'acts' }, h('button', { onclick: () => restore(t) }, '↶ Revenir avant ce prompt')),
@@ -769,14 +795,67 @@ function renderReview() {
     box.append(h('div', { class: 'hint' }, 'Sinon, joint automatiquement à ton prochain prompt.'))
   }
   for (const it of items) {
-    const icon = it.kind === 'reject' ? '❌' : it.kind === 'restore' ? '↶' : it.kind === 'snippet' ? '📎' : '💬'
-    const where = it.path ? `${rel(it.path)}${it.line ? `:${it.line}${it.endLine && it.endLine !== it.line ? '-' + it.endLine : ''}` : ''}` : 'Restauration'
+    const icon = it.kind === 'reject' ? '❌' : it.kind === 'restore' ? '↶' : it.kind === 'snippet' ? '📎' : it.kind === 'tests' ? '🧪' : '💬'
+    const where = it.path ? `${rel(it.path)}${it.line ? `:${it.line}${it.endLine && it.endLine !== it.line ? '-' + it.endLine : ''}` : ''}` : it.kind === 'tests' ? 'Tests' : 'Restauration'
     box.append(h('div', { class: 'item', onclick: () => it.path && openFile(it.path, { line: it.line || 1 }) },
       h('div', { class: 'top' }, `${icon} ${where}`, h('span', { class: 'x', title: 'Retirer', onclick: (e) => { e.stopPropagation(); event({ type: 'uncomment', id: it.id }) } }, '✕')),
       it.text ? h('div', { class: 'txt' }, it.text) : null,
       it.code ? h('code', {}, it.code.split('\n').slice(0, 3).join('\n')) : null,
     ))
   }
+}
+
+// ---------- tests ----------
+let T_ = { running: false, command: '', started: 0, ended: 0, code: null, out: '' }
+const TAIL_LINES = 150
+const dur = (ms) => (ms < 60_000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.floor(ms / 60_000)} min ${Math.round((ms % 60_000) / 1000)} s`)
+function renderTests() {
+  const st = $('testsStatus')
+  $('testsRun').hidden = T_.running
+  $('testsStop').hidden = !T_.running
+  $('testsCmd').disabled = T_.running
+  const failed = !T_.running && T_.ended && T_.code !== 0
+  $('nTests').hidden = !T_.running && !failed
+  $('nTests').textContent = T_.running ? '…' : '!'
+  st.className = ''
+  if (T_.running) st.textContent = `⏳ En cours depuis ${fmtTime(T_.started)}…`
+  else if (T_.ended) {
+    st.className = T_.code === 0 ? 'ok' : 'bad'
+    st.textContent = `${T_.code === 0 ? '✅ Réussi' : `❌ Échec (code ${T_.code})`} · ${dur(T_.ended - T_.started)} · ${fmtTime(T_.ended)}`
+  } else {
+    st.className = 'hint'
+    st.textContent = 'Lance les tests du projet. La commande est gardée pour ce projet.'
+  }
+  $('testsActs').hidden = T_.running || !T_.ended
+  const out = $('testsOut')
+  const atEnd = out.scrollTop + out.clientHeight >= out.scrollHeight - 20
+  out.textContent = T_.out
+  if (atEnd) out.scrollTop = out.scrollHeight
+}
+async function loadTests() {
+  const r = await api('/api/tests')
+  if (!r.ok) return
+  const t = await r.json()
+  T_ = { ...T_, ...t }
+  if (!$('testsCmd').value) $('testsCmd').value = P.testCmd || t.command || t.suggested || ''
+  renderTests()
+}
+async function runTests() {
+  const command = $('testsCmd').value.trim()
+  if (!command) return $('testsCmd').focus()
+  if (command !== P.testCmd) { P.testCmd = command; savePrefs() }
+  const r = await api('/api/tests/run', { method: 'POST', body: JSON.stringify({ command }) })
+  if (!r.ok) toast((await r.json().catch(() => ({}))).error || 'Impossible de lancer les tests')
+}
+function sendTests() {
+  const lines = T_.out.replace(/\s+$/, '').split('\n')
+  const tail = lines.slice(-TAIL_LINES).join('\n')
+  const verdict = T_.code === 0 ? 'réussis' : `en échec (code ${T_.code})`
+  event({
+    type: 'tests',
+    text: `Tests lancés par l'utilisateur avec \`${T_.command}\` : ${verdict}.${lines.length > TAIL_LINES ? ` Voici les ${TAIL_LINES} dernières lignes :` : ''}`,
+    code: tail,
+  })
 }
 
 // ---------- recherche ----------
@@ -863,12 +942,24 @@ async function refreshState() {
 let started = false
 function connect() {
   const es = new EventSource(`/events?t=${encodeURIComponent(T)}`)
-  es.onopen = () => { $('dot').classList.add('on'); $('dot').title = 'Connecté'; refreshState() }
+  es.onopen = () => { $('dot').classList.add('on'); $('dot').title = 'Connecté'; refreshState().then(loadTests) }
   es.onerror = () => { $('dot').classList.remove('on'); $('dot').title = 'Déconnecté (session Claude fermée ?)' }
   es.onmessage = async (m) => {
     const ev = JSON.parse(m.data)
     if (ev.type === 'state') return refreshState()
     if (ev.type === 'toast') return toast(ev.text)
+    if (ev.type === 'tests') {
+      if (ev.phase === 'out') { T_.out = (T_.out + ev.text).slice(-1_000_000); return renderTests() }
+      const { type, phase, ...rest } = ev
+      T_ = { ...T_, ...rest }
+      renderTests()
+      if (phase === 'end') {
+        toast(T_.code === 0 ? '✅ Tests réussis' : `❌ Tests en échec (code ${T_.code})`)
+        if (P.notify && document.hidden && 'Notification' in window && Notification.permission === 'granted')
+          new Notification(T_.code === 0 ? 'Tests réussis' : 'Tests en échec', { body: srv.name, tag: 'ide-for-claude-tests-' + srv.name })
+      }
+      return
+    }
     if (ev.type === 'activity') {
       const a = $('activity')
       a.className = ev.label ? '' : 'idle'
@@ -1009,6 +1100,11 @@ require(['vs/editor/editor.main'], async () => {
     if (cur) openFile(cur, { keepView: true })
   }
   for (const b of $('sideTabs').children) b.onclick = () => showPanel(b.dataset.p)
+  $('testsRun').onclick = () => runTests()
+  $('testsStop').onclick = () => api('/api/tests/stop', { method: 'POST' })
+  $('testsSend').onclick = () => sendTests()
+  $('testsCmd').onkeydown = (e) => { if (e.key === 'Enter') runTests() }
+  $('testsCmd').onchange = () => { P.testCmd = $('testsCmd').value.trim(); savePrefs() }
   $('qoBtn').onclick = () => quickOpen()
   $('notifBtn').onclick = async () => {
     P.notify = !P.notify

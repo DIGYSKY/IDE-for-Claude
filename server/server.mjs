@@ -11,7 +11,7 @@
 import http from 'node:http'
 import fs from 'node:fs/promises'
 import { watchFile, unwatchFile, readFileSync, realpathSync } from 'node:fs'
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -35,6 +35,8 @@ if (TOKEN.length < 16) {
 // ---------- état poussé par la mod ----------
 /** chemin absolu -> contenu avant les modifs de Claude du dernier prompt */
 let changes = new Map()
+/** chemin absolu -> le sous-agent qui l'a modifié */
+let agents = new Map()
 let history = []
 let review = []
 let accepted = []
@@ -128,7 +130,14 @@ const historyMeta = () =>
       id: t.id,
       prompt: t.prompt,
       at: t.at,
-      files: t.files.map((f) => ({ path: f.path, rel: rel(f.path), isNew: f.before === null, ...stats(f.before, f.after) })),
+      files: t.files.map((f) => ({
+        path: f.path,
+        rel: rel(f.path),
+        isNew: f.before === null,
+        agent: f.agent ?? null,
+        via: f.via ?? null,
+        ...stats(f.before, f.after),
+      })),
     }))
 
 // ---------- git ----------
@@ -212,6 +221,90 @@ const search = async (q, matchCase) => {
   return results
 }
 
+// ---------- tests ----------
+// La commande vient de la page (préférences du projet) et tourne dans le shell du système,
+// à la racine du projet. Un seul lancement à la fois ; la sortie part en direct dans la page.
+const MAX_OUT = 1_000_000
+const TESTS_TIMEOUT = 15 * 60_000
+const tests = { running: false, command: '', started: 0, ended: 0, code: null, out: '', child: null, timer: null }
+const testsState = () => ({
+  running: tests.running,
+  command: tests.command,
+  started: tests.started,
+  ended: tests.ended,
+  code: tests.code,
+  out: tests.out,
+})
+// les couleurs des terminaux n'ont rien à faire dans la page
+const stripAnsi = (t) => t.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').replace(/\x1b\][^\x07]*\x07/g, '')
+
+const exists = (f) => fs.access(path.join(ROOT, f)).then(() => true, () => false)
+async function suggestTests() {
+  const pkg = await fs.readFile(path.join(ROOT, 'package.json'), 'utf8').then(JSON.parse, () => null)
+  if (pkg?.scripts?.test && !/no test specified/.test(pkg.scripts.test)) {
+    if (await exists('pnpm-lock.yaml')) return 'pnpm test'
+    if (await exists('yarn.lock')) return 'yarn test'
+    if ((await exists('bun.lockb')) || (await exists('bun.lock'))) return 'bun test'
+    return 'npm test'
+  }
+  if ((await exists('.claude-plugin/plugin.json')) && (await exists('tests'))) return 'claude plugin test .'
+  if (await exists('Cargo.toml')) return 'cargo test'
+  if (await exists('go.mod')) return 'go test ./...'
+  if ((await exists('pytest.ini')) || (await exists('pyproject.toml')) || (await exists('setup.py'))) return 'pytest'
+  if (await exists('Makefile')) {
+    const mk = await fs.readFile(path.join(ROOT, 'Makefile'), 'utf8').catch(() => '')
+    if (/^test:/m.test(mk)) return 'make test'
+  }
+  return ''
+}
+
+function runTests(command) {
+  Object.assign(tests, { running: true, command, started: Date.now(), ended: 0, code: null, out: '' })
+  send({ type: 'tests', phase: 'start', ...testsState() })
+  const child = spawn(command, {
+    cwd: ROOT,
+    shell: true,
+    detached: process.platform !== 'win32',
+    env: { ...process.env, CI: '1', FORCE_COLOR: '0', NO_COLOR: '1' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  tests.child = child
+  const onData = (buf) => {
+    const text = stripAnsi(buf.toString('utf8'))
+    tests.out = (tests.out + text).slice(-MAX_OUT)
+    send({ type: 'tests', phase: 'out', text })
+  }
+  child.stdout.on('data', onData)
+  child.stderr.on('data', onData)
+  const done = (code) => {
+    if (!tests.running) return
+    clearTimeout(tests.timer)
+    Object.assign(tests, { running: false, ended: Date.now(), code, child: null })
+    send({ type: 'tests', phase: 'end', ...testsState() })
+  }
+  child.on('error', (e) => {
+    onData(Buffer.from(`\n${e.message}\n`))
+    done(-1)
+  })
+  child.on('close', (code, signal) => done(code ?? (signal ? -1 : 0)))
+  tests.timer = setTimeout(() => {
+    onData(Buffer.from('\n⏱️ Arrêtés après 15 minutes.\n'))
+    stopTests()
+  }, TESTS_TIMEOUT)
+}
+
+function stopTests() {
+  const child = tests.child
+  if (!child) return
+  try {
+    // tout le groupe : npm lance souvent d'autres processus sous lui
+    if (process.platform === 'win32') execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'])
+    else process.kill(-child.pid, 'SIGTERM')
+  } catch {
+    child.kill('SIGTERM')
+  }
+}
+
 // ---------- serveur ----------
 let PORT = 0
 
@@ -236,7 +329,8 @@ const server = http.createServer(async (req, res) => {
         root: ROOT,
         name: NAME,
         sep: path.sep,
-        changes: [...changes.keys()].map((p) => ({ path: p, rel: rel(p) })),
+        changes: [...changes.keys()].map((p) => ({ path: p, rel: rel(p), agent: agents.get(p) ?? null })),
+        tests: testsState(),
         history: historyMeta(),
         review,
         accepted,
@@ -332,7 +426,9 @@ const server = http.createServer(async (req, res) => {
     // la mod pousse l'état de la session
     if (route === 'POST /api/push') {
       const s = await body(req)
-      changes = new Map((Array.isArray(s.changes) ? s.changes : []).map((c) => [path.normalize(c.path), String(c.before ?? '')]))
+      const list = Array.isArray(s.changes) ? s.changes : []
+      changes = new Map(list.map((c) => [path.normalize(c.path), String(c.before ?? '')]))
+      agents = new Map(list.filter((c) => c.agent).map((c) => [path.normalize(c.path), String(c.agent)]))
       history = Array.isArray(s.history) ? s.history : history
       review = Array.isArray(s.review) ? s.review : review
       accepted = Array.isArray(s.accepted) ? s.accepted : accepted
@@ -345,6 +441,21 @@ const server = http.createServer(async (req, res) => {
     // la mod parle à la page : activité, fin de tour, toast, conflit de restauration
     if (route === 'POST /api/notify') {
       send(await body(req))
+      return json(res, 200, { ok: true })
+    }
+
+    if (route === 'GET /api/tests') return json(res, 200, { ...testsState(), suggested: await suggestTests() })
+
+    if (route === 'POST /api/tests/run') {
+      const { command } = await body(req)
+      if (typeof command !== 'string' || !command.trim()) return json(res, 400, { error: 'commande vide' })
+      if (tests.running) return json(res, 409, { error: 'des tests tournent déjà' })
+      runTests(command.trim())
+      return json(res, 200, { ok: true })
+    }
+
+    if (route === 'POST /api/tests/stop') {
+      stopTests()
       return json(res, 200, { ok: true })
     }
 
@@ -372,6 +483,7 @@ setInterval(() => {
   try {
     process.kill(parent, 0)
   } catch {
+    stopTests()
     process.exit(0)
   }
 }, 5_000).unref()
@@ -387,6 +499,7 @@ console.log(JSON.stringify({ port: PORT }))
 
 for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP'])
   process.on(sig, () => {
+    stopTests()
     for (const p of watched) unwatchFile(p)
     process.exit(0)
   })
