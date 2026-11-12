@@ -22,6 +22,8 @@ const fullAtom = atom({ plugin: 'ide-for-claude', key: 'full' } as const, false,
 const CONTEXT = 3
 const webAtom = atom({ plugin: 'ide-for-claude', key: 'web' } as const, null as { port: number; token: string } | null, { shape: 'web-1' })
 /** la personne a fermé le panneau : il ne se rouvre plus tout seul avant un /ide-for-claude */
+/** l'id de session dont l'historique est en mémoire (relu de son fichier s'il y en avait un) */
+const restoredForAtom = atom({ plugin: 'ide-for-claude', key: 'restoredFor' } as const, null as string | null, { shape: 'restoredFor-1' })
 const paneClosedAtom = atom({ plugin: 'ide-for-claude', key: 'paneClosed' } as const, false, { shape: 'paneClosed-1' })
 
 const historyAtom = atom({ plugin: 'ide-for-claude', key: 'history' } as const, [] as Turn[], { shape: 'history-1' })
@@ -463,15 +465,52 @@ async function dataDir($: $) {
   return sessionsDir
 }
 
-async function sessionFile($: $) {
-  const id = await $.session.id().catch(() => '')
+async function sessionFileOf($: $, id: string) {
   return id && /^[\w.-]+$/.test(id) ? `${await dataDir($)}/${id}.json` : null
 }
 
-/** Écrit l'état de revue de la session sur le disque. Ne rejette jamais. */
-async function persist($: $) {
+async function readSaved($: $, file: string): Promise<Partial<Saved> | null> {
+  const text = await $.fs.read(file).catch(() => null)
+  if (typeof text !== 'string') return null
   try {
-    const file = await sessionFile($)
+    const data = JSON.parse(text) as Partial<Saved>
+    return data.v === 1 && Array.isArray(data.history) ? data : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Rattache l'état en mémoire à la session en cours. Une reprise (`/resume`, la liste de
+ * `claude --resume`) ou un `/clear` change l'id de session SANS relancer session.start :
+ * on vérifie donc l'id à chaque fois, et on relit son fichier avant toute écriture.
+ * Ce qui est déjà en mémoire (modifs faites depuis la bascule) passe après l'historique relu.
+ */
+async function ensureRestored($: $): Promise<string | null> {
+  const id = await $.session.id().catch(() => '')
+  if (!id) return null
+  if ((await read($, restoredForAtom)) === id) return id
+  const file = await sessionFileOf($, id)
+  const data = file ? await readSaved($, file) : null
+  if (data) {
+    const saved = data.history!
+    let next = saved.reduce((m, t) => Math.max(m, t.id), 0)
+    await update($, historyAtom, mine => [...saved, ...mine.map(t => ({ ...t, id: ++next }))])
+    const savedChanges = (data.changes ?? []).map(c => ({ ...c, stale: true }))
+    await update($, changesAtom, mine => [...savedChanges.filter(c => !mine.some(m => m.path === c.path)), ...mine])
+    await update($, reviewAtom, mine => [...(data.review ?? []).filter(r => !mine.some(m => m.id === r.id)), ...mine])
+    await update($, acceptedAtom, mine => [...new Set([...(data.accepted ?? []), ...mine])])
+  }
+  await update($, restoredForAtom, () => id)
+  return id
+}
+
+/** Écrit l'état de revue de la session sur le disque. Ne rejette jamais. */
+async function persist($: $, id?: string) {
+  try {
+    // jamais d'écriture avant d'avoir relu ce que le fichier contient déjà
+    const sid = id ?? (await ensureRestored($))
+    const file = sid ? await sessionFileOf($, sid) : null
     if (!file) return
     const history = (await read($, historyAtom)).filter(t => t.files.length > 0)
     const changes = await read($, changesAtom)
@@ -485,24 +524,16 @@ async function persist($: $) {
   }
 }
 
-/** Au démarrage d'une session reprise : on retrouve son historique et sa revue en cours. */
-async function restoreSession($: $) {
-  if ((await read($, historyAtom)).length || (await read($, changesAtom)).length) return
-  const file = await sessionFile($)
-  if (!file) return
-  const text = await $.fs.read(file).catch(() => null)
-  if (typeof text !== 'string') return
-  let data: Partial<Saved>
-  try {
-    data = JSON.parse(text)
-  } catch {
-    return
-  }
-  if (data.v !== 1 || !Array.isArray(data.history)) return
-  await update($, historyAtom, () => data.history!)
-  if (Array.isArray(data.changes)) await update($, changesAtom, () => data.changes!.map(c => ({ ...c, stale: true })))
-  if (Array.isArray(data.review)) await update($, reviewAtom, () => data.review!)
-  if (Array.isArray(data.accepted)) await update($, acceptedAtom, () => data.accepted!)
+/** La conversation se termine (sortie, /clear, reprise d'une autre) : on l'enregistre, puis on repart à vide. */
+async function endSession($: $, sessionId: string, reason: string) {
+  if ((await read($, restoredForAtom)) === sessionId) await persist($, sessionId)
+  if (reason !== 'clear' && reason !== 'resume') return
+  await update($, historyAtom, () => [])
+  await update($, changesAtom, () => [])
+  await update($, reviewAtom, () => [])
+  await update($, acceptedAtom, () => [])
+  await update($, restoredForAtom, () => null)
+  void pushChanges($).catch(() => undefined)
 }
 
 /** Les historiques de plus de 30 jours sont effacés. */
@@ -820,7 +851,7 @@ export const register: Register = on => {
     await $.command.register({ name: 'ide-for-claude', description: 'Ouvre l’éditeur (option : un fichier)' })
     await $.command.register({ name: 'ide-for-claude-web', description: 'Ouvre IDE for Claude dans le navigateur (Monaco, diff des modifs de Claude)' })
     // une session reprise retrouve son historique ; ses fichiers supprimés depuis sortent de la revue
-    await restoreSession($).catch(() => undefined)
+    await ensureRestored($).catch(() => null)
     await pruneGone($).catch(() => false)
     await loadPanePrefs($).catch(() => undefined)
     void pruneSessions($).catch(() => undefined)
@@ -831,6 +862,7 @@ export const register: Register = on => {
 
   on('command.run', { command: 'ide-for-claude' }, async ($, e) => {
     const arg = e.args.trim()
+    await ensureRestored($).catch(() => null)
     if (arg) await openFile($, absOf(await $.session.cwd(), arg))
     await update($, paneClosedAtom, () => false)
     await $.ui.open({ id: PANE, title: TITLE, focus: true })
@@ -838,6 +870,7 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'ide-for-claude-web' }, async $ => {
+    await ensureRestored($).catch(() => null)
     try {
       const url = await openWeb($)
       return { text: `IDE for Claude ouvert dans le navigateur : ${url}` }
@@ -849,6 +882,7 @@ export const register: Register = on => {
   // un nouveau prompt : nouveau tour d'historique, et la review en attente part avec lui
   on('prompt.submit', async ($, e, next) => {
     if (e.command) return next(e)
+    await ensureRestored($).catch(() => null)
     await update($, changesAtom, list => list.map(c => ({ ...c, stale: true })))
     await newTurn($, e.text)
     const block = await reviewBlock($)
@@ -877,6 +911,11 @@ export const register: Register = on => {
     const result = await next(e)
     if (snap) await diffSnapshot($, snap, { agent: await agentLabel($, e.agentId), via: 'Bash' }).catch(() => undefined)
     return result
+  })
+
+  on('session.end', async ($, e, next) => {
+    await endSession($, e.sessionId, String(e.reason)).catch(() => undefined)
+    return next(e)
   })
 
   // fermé à la croix, par Échap ou par « Quitter » : on ne le rouvre plus tout seul

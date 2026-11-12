@@ -36,6 +36,8 @@ declare module 'claude-code' {
       accepted: Shaped<string[]>
       /** la personne a fermé le panneau : plus d'ouverture automatique */
       paneClosed: Shaped<boolean>
+      /** l'id de session dont l'historique est en mémoire */
+      restoredFor: Shaped<string | null>
     }
   }
 }

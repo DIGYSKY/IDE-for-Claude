@@ -6,9 +6,9 @@ type On = Parameters<Parameters<typeof test>[1]>[1]
 const FILE = '/home/moi/.claude/plugins/data/ide-for-claude/sessions/abc-123.json'
 
 /** Une session « abc-123 » dans /p, un disque en mémoire. */
-function session(on: On, disk: Map<string, string>) {
+function session(on: On, disk: Map<string, string>, id: () => string = () => 'abc-123') {
   on('session.cwd', () => ({ value: '/p' }))
-  on('session.id', () => ({ value: 'abc-123' }))
+  on('session.id', () => ({ value: id() }))
   on('env.get', (_$, e) => ({ value: (e as unknown as { name: string }).name === 'HOME' ? '/home/moi' : undefined }))
   on('agent.list', () => ({ value: [] }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
@@ -59,4 +59,32 @@ test('une session reprise retrouve son historique', async ($, on) => {
 
   expect(written.history).toEqual(history)
   expect((written.changes as { path: string }[]).map(c => c.path)).toEqual(['/p/a.txt'])
+})
+
+test('reprise depuis la liste : l’id change sans session.start, l’historique est relu et jamais écrasé', async ($, on) => {
+  const history: Turn[] = [{ id: 1, prompt: 'fait un test', at: 1, files: [{ path: '/p/a.txt', before: null, after: 'un\n' }] }]
+  const saved = JSON.stringify({ v: 1, cwd: '/p', savedAt: 1, history, changes: [], review: [], accepted: [] })
+  const disk = new Map([['/p/a.txt', 'un\n'], [FILE, saved]])
+  // la session démarre sous un nouvel id, puis /resume la bascule sur abc-123
+  let id = 'nouvelle-session'
+  session(on, disk, () => id)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('session.end', (_$, e) => ({ sessionId: (e as unknown as { sessionId: string }).sessionId }))
+  on('prompt.submit', (_$, e) => ({ text: e.text }))
+  const written: Record<string, unknown> = {}
+  on('state.set', ($, e, next) => {
+    const w = e as unknown as { key: string; value: { value: unknown } }
+    written[w.key] = w.value.value
+    return next(e)
+  })
+
+  await $.session.start({ cwd: '/p', surface: 'terminal', isInteractive: true })
+  await $.session.end({ reason: 'resume', sessionId: 'nouvelle-session', resume: {} } as never)
+  id = 'abc-123'
+  await $.prompt.submit({ text: 'le prompt est resté ?' } as never)
+
+  expect((written.history as Turn[]).map(t => t.prompt)).toEqual(['fait un test', 'le prompt est resté ?'])
+  // le fichier garde l'historique
+  expect((JSON.parse(disk.get(FILE)!).history as Turn[]).map(t => t.prompt)).toEqual(['fait un test'])
+  expect(disk.has('/home/moi/.claude/plugins/data/ide-for-claude/sessions/nouvelle-session.json')).toBe(false)
 })

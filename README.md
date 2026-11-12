@@ -68,7 +68,7 @@ Sur macOS, `Cmd` marche à la place de `Ctrl`.
 
 | Quoi | Portée | Où |
 |---|---|---|
-| Historique des prompts, revue en cours (modifs, commentaires, blocs validés) | par session : retrouvés avec `claude --resume` | `~/.claude/plugins/data/ide-for-claude/sessions/<session>.json`, effacé après 30 jours |
+| Historique des prompts, revue en cours (modifs, commentaires, blocs validés) | par session : retrouvés en reprenant la conversation (`claude --resume`, la liste de `/resume`, `claude -c`) | `~/.claude/plugins/data/ide-for-claude/sessions/<session>.json`, effacé après 30 jours |
 | Page web : onglets ouverts, fichier affiché, position dans chaque fichier, une ou deux colonnes, lignes inchangées repliées ou non, base du diff, panneau latéral, notifications, commande de test | par projet | stockage de la mod (`$.store`) |
 | Panneau terminal : tout voir / replier, arbre affiché ou non | pour toutes les sessions | stockage de la mod (`$.store`) |
 
