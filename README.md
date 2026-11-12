@@ -55,12 +55,35 @@ Sur macOS, `Cmd` marche à la place de `Ctrl`.
 
 ## Prérequis
 
-- Claude Code avec les mods (hooks modules)
+- Claude Code 2.1.275 ou plus récent (installation en une commande, mods / hooks modules)
 - Node.js 18 ou plus récent pour le mode navigateur
 - Internet pour charger Monaco depuis le CDN jsDelivr
 - `xdg-open` (Linux) ou `open` (macOS) pour ouvrir le navigateur automatiquement. Ailleurs, copier l'adresse affichée par `/ide-for-claude-web`
 
 ## Installation
+
+Une seule commande, à copier-coller dans un terminal :
+
+```sh
+claude plugin install ide-for-claude --marketplace DIGYSKY/IDE-for-Claude
+```
+
+Ou, directement dans Claude Code :
+
+```
+/plugin install ide-for-claude --marketplace DIGYSKY/IDE-for-Claude
+```
+
+La commande ajoute la marketplace `digysky` (ce dépôt) puis installe la mod. Redémarre ensuite Claude Code et tape `/ide-for-claude`.
+
+Pour mettre à jour :
+
+```sh
+claude plugin marketplace update digysky && claude plugin update ide-for-claude@digysky
+```
+
+<details>
+<summary>Installation manuelle (sans marketplace)</summary>
 
 Cloner le dépôt, par exemple dans `~/.claude/mods/ide-for-claude` :
 
@@ -80,7 +103,7 @@ Puis l'ajouter dans `~/.claude/settings.json` :
 
 Ou, pour une seule session : `claude --plugin-dir ~/.claude/mods/ide-for-claude`.
 
-Pour mettre à jour : `git -C ~/.claude/mods/ide-for-claude pull`.
+</details>
 
 ## Sécurité
 
@@ -103,6 +126,7 @@ claude plugin test .
 
 ```
 .claude-plugin/plugin.json   manifeste
+.claude-plugin/marketplace.json  marketplace « digysky » pour l'installation
 hooks/register.tsx           la mod : panneau, suivi des modifs, historique, review
 hooks/syntax.ts              coloration syntaxique du panneau terminal
 server/server.mjs            serveur local du mode navigateur (sans dépendance)
