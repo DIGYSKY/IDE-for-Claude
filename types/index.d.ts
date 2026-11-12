@@ -52,7 +52,8 @@ export type Queued = { id: string; text: string; at: number }
 /** une étape du plan de Claude (sa liste TodoWrite) */
 export type PlanItem = { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm: string }
 /** de quoi remplir la barre d'état de la page */
-export type Status = { model?: string; tokens?: number; window?: number; percent?: number; usd?: number; at: number }
+/** `line` : la sortie de la statusLine de Claude Code, avec ses couleurs de terminal */
+export type Status = { model?: string; tokens?: number; window?: number; percent?: number; usd?: number; at: number; line?: string }
 
 declare module 'claude-code' {
   interface PluginState {

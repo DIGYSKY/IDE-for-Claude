@@ -181,6 +181,8 @@
   /* barre d'état */
   #statusline { cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   #statusline:hover { color: var(--text); }
+  /* la statusLine de Claude Code : police de terminal, avec les symboles Nerd Font s'ils sont installés */
+  #statusline.cc { font-family: "Symbols Nerd Font", "Symbols Nerd Font Mono", "JetBrainsMono Nerd Font", "MesloLGS NF", "Hack Nerd Font", "FiraCode Nerd Font", ui-monospace, Menlo, monospace; font-size: 12px; }
   /* réglages */
   #settings .card { width: min(880px, 95vw); }
   #settings .body { padding: 0; display: flex; height: min(600px, 76vh); }
@@ -314,9 +316,9 @@
     <div id="banner"><span id="bannerText"></span><span class="spacer"></span>
       <button id="bannerReload">Recharger</button><button id="bannerForce">Écraser</button></div>
     <div id="editors">
-      <div id="empty">Choisis un fichier à gauche ou avec <kbd>Ctrl+P</kbd>.<br>
+      <div id="empty"><div>Choisis un fichier à gauche ou avec <kbd>Ctrl+P</kbd>.<br>
         Les fichiers modifiés par Claude s'ouvrent ici avec leur diff.<br>
-        <kbd>Ctrl+L</kbd> joint la sélection pour Claude, le <b>+</b> d'une ligne la commente.</div>
+        <kbd>Ctrl+L</kbd> joint la sélection au prompt, le <b>+</b> d'une ligne la commente.</div></div>
       <div id="ed" hidden></div>
       <div id="diff" hidden></div>
       <div id="runView" hidden>
@@ -1217,8 +1219,69 @@ function applyAnnotations() {
 }
 
 // ---------- barre d'état ----------
+// Les couleurs du terminal (SGR : 16 couleurs, 256 couleurs, RGB, gras...) deviennent des <span>.
+const ANSI16 = ['#000000', '#cd3131', '#0dbc79', '#e5e510', '#2472c8', '#bc3fbc', '#11a8cd', '#e5e5e5',
+  '#666666', '#f14c4c', '#23d18b', '#f5f543', '#3b8eea', '#d670d6', '#29b8db', '#ffffff']
+function ansi256(n) {
+  if (n < 16) return ANSI16[n]
+  if (n >= 232) { const v = 8 + (n - 232) * 10; return `rgb(${v},${v},${v})` }
+  n -= 16
+  const c = (x) => (x ? 55 + x * 40 : 0)
+  return `rgb(${c(Math.floor(n / 36))},${c(Math.floor(n / 6) % 6)},${c(n % 6)})`
+}
+function ansiToNodes(text) {
+  // les liens OSC 8 et les autres séquences non SGR sont retirés
+  text = text.replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '').replace(/\x1b\[[0-9;?]*[A-LN-Za-ln-z]/g, '')
+  const out = []
+  let st = {}
+  const parts = text.split(/\x1b\[([0-9;]*)m/)
+  for (let i = 0; i < parts.length; i++) {
+    if (i % 2 === 0) {
+      if (!parts[i]) continue
+      const span = h('span', {}, parts[i])
+      if (st.fg) span.style.color = st.fg
+      if (st.bg) span.style.background = st.bg
+      if (st.bold) span.style.fontWeight = '700'
+      if (st.dim) span.style.opacity = '.65'
+      if (st.italic) span.style.fontStyle = 'italic'
+      if (st.underline) span.style.textDecoration = 'underline'
+      out.push(span)
+      continue
+    }
+    const codes = (parts[i] || '0').split(';').map(Number)
+    for (let k = 0; k < codes.length; k++) {
+      const c = codes[k]
+      if (c === 0) st = {}
+      else if (c === 1) st.bold = true
+      else if (c === 2) st.dim = true
+      else if (c === 3) st.italic = true
+      else if (c === 4) st.underline = true
+      else if (c === 22) st.bold = st.dim = false
+      else if (c === 23) st.italic = false
+      else if (c === 24) st.underline = false
+      else if (c >= 30 && c <= 37) st.fg = ANSI16[c - 30]
+      else if (c >= 90 && c <= 97) st.fg = ANSI16[c - 82]
+      else if (c === 39) st.fg = null
+      else if (c >= 40 && c <= 47) st.bg = ANSI16[c - 40]
+      else if (c >= 100 && c <= 107) st.bg = ANSI16[c - 92]
+      else if (c === 49) st.bg = null
+      else if ((c === 38 || c === 48) && codes[k + 1] === 2) { const col = `rgb(${codes[k + 2]},${codes[k + 3]},${codes[k + 4]})`; if (c === 38) st.fg = col; else st.bg = col; k += 4 }
+      else if ((c === 38 || c === 48) && codes[k + 1] === 5) { const col = ansi256(codes[k + 2]); if (c === 38) st.fg = col; else st.bg = col; k += 2 }
+    }
+  }
+  return out
+}
 function renderStatus() {
   const st = srv.status || {}
+  // la barre d'état de Claude Code elle-même, si elle est configurée et choisie
+  if (st.line && (!srv.ide || srv.ide.statuslineSource !== 'template')) {
+    const box = $('statusline')
+    box.classList.add('cc')
+    box.replaceChildren(...ansiToNodes(st.line.split('\n')[0]))
+    box.title = 'La barre d\'état de Claude Code (statusLine). Clic pour la régler'
+    return
+  }
+  $('statusline').classList.remove('cc')
   const plan = srv.plan || []
   const doing = plan.find((x) => x.status === 'in_progress')
   const vals = {
@@ -1264,6 +1327,16 @@ function insertInPrompt(text) {
   const t = (before && !/\s/.test(before) ? ' ' : '') + text
   promptEd.executeEdits('mi', [{ range: pos, text: t, forceMoveMarkers: true }])
   promptEd.focus()
+}
+/** # tapé sans idée dans la boîte : la ligne d'aide sous le prompt le dit quelques secondes */
+let hintTimer
+function noIdeaHint() {
+  const el = $('promptHint')
+  if (!el.dataset.base) el.dataset.base = el.textContent
+  el.replaceChildren(h('a', { style: 'cursor:pointer;color:var(--accent)', onclick: () => { showPanel('ideas'); $('ideaText').focus() } },
+    '💡 Aucune idée pour l\'instant : ouvre la boîte à idées, ou demande à Claude d\'en noter'))
+  clearTimeout(hintTimer)
+  hintTimer = setTimeout(() => { el.textContent = el.dataset.base }, 5000)
 }
 function sendPrompt() {
   const text = promptEd.getValue().trim()
@@ -1430,6 +1503,8 @@ function renderSettings() {
       setRow('Ouvrir les fichiers modifiés par Claude', 'Le dernier fichier modifié s\'affiche tout seul', control('bool', P.openChanged !== false, (v) => putP('openChanged', v))),
       setRow('Son de fin', 'Quand Claude a fini, avec les notifications 🔔', control('bool', P.sound !== false, (v) => putP('sound', v))),
       h('h3', {}, 'Barre d\'état'),
+      setRow('Source', 'Celle de Claude Code lance ta commande statusLine (settings.json), avec ses couleurs ; sinon, le modèle ci-dessous',
+        control(['claude', 'template'], ide.statuslineSource || 'claude', (v) => { put('statuslineSource', v); event({ type: 'status.refresh' }) })),
       setRow('Modèle', 'Variables : {model} {context} {tokens} {window} {cost} {branch} {plan} {queue} {review} {time}. Tu peux aussi demander à Claude de la changer.', control('text', ide.statusline, (v) => put('statusline', v))))
   } else {
     body.append(h('p', { class: 'hint' }, 'Les réglages de /config, appliqués tout de suite. Plus bas, les fichiers settings.json de Claude Code.'))
@@ -1747,7 +1822,9 @@ require(['vs/editor/editor.main'], async () => {
     value: '', language: 'markdown', automaticLayout: true, minimap: { enabled: false }, lineNumbers: 'off', glyphMargin: false,
     folding: false, lineDecorationsWidth: 6, lineNumbersMinChars: 0, wordWrap: 'on', scrollBeyondLastLine: false,
     renderLineHighlight: 'none', overviewRulerLanes: 0, hideCursorInOverviewRuler: true, fontSize: 13,
-    scrollbar: { vertical: 'auto', horizontal: 'hidden' }, suggest: { showWords: false }, quickSuggestions: false, wordBasedSuggestions: 'off',
+    scrollbar: { vertical: 'auto', horizontal: 'hidden' }, suggest: { showWords: false, showIcons: true, preview: false }, quickSuggestions: false, wordBasedSuggestions: 'off',
+    // la liste des suggestions s'affiche par-dessus la page : la zone du prompt, petite et en bas, la couperait
+    fixedOverflowWidgets: true,
   })
   const promptModel = promptEd.getModel()
   promptEd.onDidFocusEditorWidget(() => $('promptEd').classList.add('focus'))
@@ -1787,6 +1864,8 @@ require(['vs/editor/editor.main'], async () => {
         return { suggestions: (srv.commands || []).map((c) => ({ label: '/' + c.name, kind: c.source === 'builtin' ? K.Keyword : K.Function, detail: c.source, documentation: c.description, insertText: '/' + c.name + ' ', range })) }
       }
       const ideas = ((srv.project && srv.project.ideas) || []).filter((i) => i.status !== 'done')
+      // pas d'idée : Monaco n'afficherait pas une suggestion « vide » ; la ligne d'aide le dit à la place
+      if (!ideas.length) { noIdeaHint(); return { suggestions: [] } }
       return { suggestions: ideas.map((i) => ({ label: `#i${i.n}`, kind: K.Reference, detail: i.text.slice(0, 80), documentation: i.text, insertText: `#i${i.n} `, filterText: `#i${i.n} ${i.text}`, range })) }
     },
   })

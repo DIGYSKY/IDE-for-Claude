@@ -659,12 +659,15 @@ type IdeSettings = {
   historyDays: number
   /** modèle de la barre d'état de la page */
   statusline: string
+  /** `claude` : la statusLine configurée dans Claude Code (son script) ; `template` : le modèle ci-dessus */
+  statuslineSource: 'claude' | 'template'
 }
 const IDE_DEFAULTS: IdeSettings = {
   autoOpenPane: true,
   attachReview: true,
   historyDays: 30,
   statusline: '{model} · contexte {context} · {cost} · {branch}',
+  statuslineSource: 'claude',
 }
 async function ideSettings($: $): Promise<IdeSettings> {
   const s = (await $.store.get('ide').catch(() => undefined)) as Partial<IdeSettings> | undefined
@@ -762,7 +765,7 @@ async function refreshStatus($: $, force = false) {
     const model = await $.session.model().catch(() => undefined)
     const cwd = await $.session.cwd()
     const head = await $.process.run(['git', '-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD'], { timeoutMs: 5000 }).catch(() => null)
-    const status: Status & { branch?: string } = {
+    const status: Status & { branch?: string; line?: string } = {
       model,
       tokens: usage?.context.tokens,
       window: usage?.context.window,
@@ -771,11 +774,60 @@ async function refreshStatus($: $, force = false) {
       at: Date.now(),
       ...(head && head.exitCode === 0 ? { branch: head.stdout.trim() } : {}),
     }
+    if ((await ideSettings($)).statuslineSource !== 'template') {
+      const line = await claudeStatusLine($, cwd, model, usage).catch(() => null)
+      if (line) status.line = line
+    }
     await update($, statusAtom, () => status)
     await notify($, { type: 'status', status })
   } catch {
     // la barre d'état n'est qu'un confort
   }
+}
+
+/** « claude-opus-5-5[1m] » -> « Opus 5.5 », comme Claude Code l'affiche */
+function modelName(id: string | undefined) {
+  if (!id) return undefined
+  const m = id.replace(/\[.*\]$/, '').match(/^claude-([a-z]+)-(\d+)(?:-(\d+))?/)
+  return m ? `${m[1]![0]!.toUpperCase()}${m[1]!.slice(1)} ${m[2]}${m[3] ? `.${m[3]}` : ''}` : id
+}
+
+/**
+ * La barre d'état configurée dans Claude Code (settings « statusLine » de type command) :
+ * on lance la même commande avec le JSON que Claude Code lui donne, et on garde sa sortie,
+ * couleurs du terminal comprises (la page les convertit).
+ */
+async function claudeStatusLine($: $, cwd: string, model: string | undefined, usage: Awaited<ReturnType<$['session']['usage']>> | null) {
+  const conf = (await $.settings.read({ key: 'statusLine' }).catch(() => undefined)) as { type?: string; command?: string } | undefined
+  if (!conf || conf.type !== 'command' || !conf.command) return null
+  const limit = (kind: string) => {
+    const r = usage?.rateLimits.find(x => x.kind === kind)
+    return r ? { used_percentage: r.percentUsed, ...(r.resetsAt ? { resets_at: r.resetsAt } : {}) } : undefined
+  }
+  const effort = (await $.env.get('CLAUDE_EFFORT').catch(() => undefined)) || ((await $.settings.read({ key: 'effortLevel' }).catch(() => undefined)) as string | undefined)
+  const input = {
+    hook_event_name: 'Status',
+    session_id: await $.session.id().catch(() => ''),
+    cwd,
+    model: { id: model, display_name: modelName(model) },
+    workspace: { current_dir: cwd, project_dir: await $.session.root().catch(() => cwd) },
+    version: (await $.session.version().catch(() => null))?.version,
+    ...(typeof usage?.cost?.usd === 'number' ? { cost: { total_cost_usd: usage.cost.usd } } : {}),
+    ...(usage
+      ? {
+          context_window: {
+            context_window_size: usage.context.window,
+            ...(typeof usage.context.percent === 'number' ? { used_percentage: usage.context.percent } : {}),
+            ...(typeof usage.context.tokens === 'number' ? { total_input_tokens: usage.context.tokens } : {}),
+          },
+        }
+      : {}),
+    rate_limits: { five_hour: limit('five_hour'), seven_day: limit('seven_day') },
+    ...(effort ? { effort: { level: effort } } : {}),
+  }
+  const r = await $.process.run(['sh', '-c', conf.command], { cwd, stdin: JSON.stringify(input), timeoutMs: 5000 })
+  const out = r.stdout.replace(/\s+$/, '')
+  return r.exitCode === 0 && out ? out.split('\n').slice(0, 3).join('\n') : null
 }
 
 // ---------- commandes de Claude Code (/ et skills), pour l'autocomplétion ----------

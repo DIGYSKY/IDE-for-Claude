@@ -55,7 +55,7 @@ On peut passer de l'une à l'autre : la touche `w` du panneau ouvre la page web 
 
 ### Parler à Claude depuis la page
 
-- **Éditeur de prompt** en bas de la page, avec autocomplétion :
+- **Éditeur de prompt** en bas de la page, avec des suggestions dès que tu tapes `@`, `/` ou `#` :
   - `@fichier` : le contenu du fichier est joint (au-delà de 30 Ko, seulement son nom)
   - `@fichier:12-30` : ces lignes sont jointes ; `Ctrl+L` dans le code insère la sélection
   - `/commande` : en tête de prompt, la commande ou le skill est lancé comme dans le terminal ; ailleurs, Claude est invité à s'en servir
@@ -91,7 +91,9 @@ La mod donne à Claude des outils à lui :
 
 ### Barre d'état
 
-En bas à droite : modèle, part du contexte utilisée, coût de la session, branche git, étape en cours du plan… Le modèle se règle dans ⚙️ (variables `{model}` `{context}` `{tokens}` `{window}` `{cost}` `{branch}` `{plan}` `{queue}` `{review}` `{time}`), ou en le demandant à Claude.
+En bas à droite, **la barre d'état de Claude Code** : si tu as configuré une `statusLine` (type `command`) dans ton `settings.json`, la mod lance la même commande avec le même JSON que Claude Code (modèle, dossier, contexte, coût, limites 5 h et 7 jours, effort) et affiche sa sortie avec ses couleurs. Pour les icônes Nerd Font, une police Nerd Font doit être installée sur la machine.
+
+Sinon, ou si tu choisis « template » dans ⚙️, un modèle maison : variables `{model}` `{context}` `{tokens}` `{window}` `{cost}` `{branch}` `{plan}` `{queue}` `{review}` `{time}`. Claude peut aussi le changer si tu le lui demandes.
 
 ### Raccourcis
 
