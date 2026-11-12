@@ -384,10 +384,16 @@ export async function dashboard($: $, opts: DashOptions = {}) {
   const identity = await $.session.identity().catch(() => null)
 
   const bd = usage?.context.breakdown
+  // session neuve : pas encore de requête, donc pas de total, mais la répartition est déjà là
+  const estimated = bd
+    ? bd.categories.filter(c => c.kind !== 'free' && c.kind !== 'buffer' && c.kind !== 'deferred').reduce((a, c) => a + c.tokens, 0)
+    : null
+  const tokens = usage?.context.tokens ?? (estimated || null)
+  const window = usage?.context.window ?? bd?.rawMaxTokens ?? null
   const context = {
-    tokens: usage?.context.tokens ?? null,
-    window: usage?.context.window ?? null,
-    percent: usage?.context.percent ?? null,
+    tokens,
+    window,
+    percent: usage?.context.percent ?? (tokens && window ? Math.round((100 * tokens) / window) : null),
     ...(bd
       ? {
           categories: bd.categories.map(c => ({ name: c.name, tokens: c.tokens, kind: c.kind, color: c.color })),
