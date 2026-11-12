@@ -123,17 +123,20 @@ const stats = (before, after) => {
   return { add, del }
 }
 
+// le dernier prompt est le prompt courant : listé même tant que Claude n'a rien modifié
 const historyMeta = () =>
   history
-    .filter((t) => t.files.length > 0)
+    .filter((t, i) => t.files.length > 0 || i === history.length - 1)
     .map((t) => ({
       id: t.id,
       prompt: t.prompt,
       at: t.at,
+      current: t === history[history.length - 1],
       files: t.files.map((f) => ({
         path: f.path,
         rel: rel(f.path),
         isNew: f.before === null,
+        inReview: changes.has(path.normalize(f.path)),
         agent: f.agent ?? null,
         via: f.via ?? null,
         ...stats(f.before, f.after),

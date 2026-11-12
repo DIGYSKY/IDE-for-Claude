@@ -142,7 +142,14 @@
   .turn .f.cur { background: var(--sel); }
   .turn .f .s { margin-left: auto; font: 11px ui-monospace, monospace; }
   .add { color: var(--ok); } .del { color: var(--bad); }
-  .turn .acts { padding: 5px 8px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; }
+  .turn .acts { padding: 5px 8px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 6px; }
+  /* le prompt courant : celui dont la revue est en cours */
+  .turn.current { border: 1px solid var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .turn.current .head { background: var(--accent-soft); }
+  .turn .now { font-size: 10px; font-weight: 600; color: #fff; background: var(--accent); border-radius: 4px; padding: 0 5px; }
+  .turn .f.done span:first-child { color: var(--muted); text-decoration: line-through; }
+  .turn .acts .okb { border-color: var(--ok); color: var(--ok); }
+  .turn .acts .badb { border-color: var(--bad); color: var(--bad); }
   .res { padding: 2px 10px 2px 22px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: 12px ui-monospace, monospace; color: var(--muted); }
   .res:hover { background: var(--hover); color: var(--text); }
   .res mark { background: var(--accent-soft); color: var(--accent); }
@@ -769,33 +776,59 @@ async function rejectFile() {
 // ---------- historique ----------
 function renderHistory() {
   const turns = [...srv.history].reverse()
-  $('nHist').hidden = turns.length === 0
-  $('nHist').textContent = turns.length
+  // le badge compte les fichiers encore en revue du prompt courant, sinon les prompts avec modifs
+  const pending = (turns.find((t) => t.current)?.files || []).filter((f) => f.inReview).length
+  const withFiles = turns.filter((t) => t.files.length).length
+  $('nHist').hidden = !pending && !withFiles
+  $('nHist').textContent = pending || withFiles
   const box = $('history')
   box.replaceChildren()
   if (!turns.length) return box.append(h('div', { class: 'hint' }, 'Aucune modif de Claude pour l\'instant. Chaque prompt qui touche des fichiers apparaîtra ici.'))
   const touched = [...new Map(srv.history.flatMap((t) => t.files.map((f) => [f.path, f]))).values()]
-  box.append(h('div', { class: 'turn' },
-    h('div', { class: 'head' }, h('b', {}, 'Toute la session'), h('span', { class: 't' }, `${touched.length} fichier${touched.length > 1 ? 's' : ''}`)),
-    touched.map((f) => h('div', { class: 'f' + (view.kind === 'session' && view.path === f.path ? ' cur' : ''), onclick: () => openTurn('session', f.path) }, h('span', {}, rel(f.path)))),
-  ))
-  for (const t of turns) {
+  if (touched.length) {
     box.append(h('div', { class: 'turn' },
-      h('div', { class: 'head' }, h('b', {}, `Prompt ${t.id}`), h('span', { class: 't' }, fmtTime(t.at))),
+      h('div', { class: 'head' }, h('b', {}, 'Toute la session'), h('span', { class: 't' }, `${touched.length} fichier${touched.length > 1 ? 's' : ''}`)),
+      touched.map((f) => h('div', { class: 'f' + (view.kind === 'session' && view.path === f.path ? ' cur' : ''), onclick: () => openTurn('session', f.path) }, h('span', {}, rel(f.path)))),
+    ))
+  }
+  for (const t of turns) {
+    const pending = t.files.filter((f) => f.inReview)
+    const acts = t.current
+      ? [
+          pending.length ? h('button', { class: 'okb', title: 'Valider tous les fichiers de ce prompt encore en revue', onclick: () => acceptAll(t) }, `✅ Tout accepter (${pending.length})`) : null,
+          t.files.length ? h('button', { class: 'badb', title: 'Remettre tous les fichiers de ce prompt dans leur état d\'avant', onclick: () => restore(t, false, true) }, '❌ Tout refuser') : null,
+        ]
+      : [h('button', { onclick: () => restore(t) }, '↶ Revenir avant ce prompt')]
+    box.append(h('div', { class: 'turn' + (t.current ? ' current' : '') },
+      h('div', { class: 'head' }, h('b', {}, `Prompt ${t.id}`), t.current ? h('span', { class: 'now' }, 'EN COURS') : null, h('span', { class: 't' }, fmtTime(t.at))),
       h('div', { class: 'prompt', title: t.prompt }, t.prompt || '(sans texte)'),
-      t.files.map((f) => h('div', { class: 'f' + (view.kind === 'turn' && view.id === t.id && view.path === f.path ? ' cur' : ''), onclick: () => openTurn(t.id, f.path) },
-        h('span', {}, (f.isNew ? '🆕 ' : '') + f.rel, whoTag(f)),
+      t.current && !t.files.length ? h('div', { class: 'hint' }, 'Aucune modif de Claude pour ce prompt pour l\'instant.') : null,
+      t.files.map((f) => h('div', {
+        class: 'f' + (view.kind === 'turn' && view.id === t.id && view.path === f.path ? ' cur' : '') + (t.current && !f.inReview ? ' done' : ''),
+        title: t.current && !f.inReview ? 'Validé : sorti de la revue' : '',
+        onclick: () => openTurn(t.id, f.path),
+      },
+        h('span', {}, (t.current && !f.inReview ? '✅ ' : f.isNew ? '🆕 ' : '') + f.rel, whoTag(f)),
         h('span', { class: 's' }, h('span', { class: 'add' }, `+${f.add}`), ' ', h('span', { class: 'del' }, `-${f.del}`)),
       )),
-      h('div', { class: 'acts' }, h('button', { onclick: () => restore(t) }, '↶ Revenir avant ce prompt')),
+      acts.some(Boolean) ? h('div', { class: 'acts' }, acts) : null,
     ))
   }
 }
-async function restore(t, force = false) {
+/** Tout accepter : les fichiers du prompt encore en revue en sortent, comme avec ✅ Fichier. */
+function acceptAll(t) {
+  const paths = t.files.filter((f) => f.inReview).map((f) => f.path)
+  if (!paths.length) return
+  if (cur && paths.includes(cur) && !tabs.includes(cur)) { tabs.push(cur); savePrefs() }
+  event({ type: 'acceptFiles', paths })
+}
+async function restore(t, force = false, refuse = false) {
   const later = srv.history.filter((x) => x.id >= t.id)
   const n = new Set(later.flatMap((x) => x.files.map((f) => f.path))).size
   if (!force) {
-    const ok = await confirmBox(`Remettre <b>${n} fichier${n > 1 ? 's' : ''}</b> dans leur état d'avant le <b>prompt ${t.id}</b>${later.length > 1 ? ` (et les ${later.length - 1} suivants)` : ''} ?<br><br>Claude sera prévenu au prochain prompt.`, '↶ Revenir')
+    const ok = refuse
+      ? await confirmBox(`Refuser toutes les modifs du <b>prompt ${t.id}</b> et remettre <b>${n} fichier${n > 1 ? 's' : ''}</b> dans leur état d'avant ?<br><br>Claude sera prévenu au prochain prompt.`, '❌ Tout refuser')
+      : await confirmBox(`Remettre <b>${n} fichier${n > 1 ? 's' : ''}</b> dans leur état d'avant le <b>prompt ${t.id}</b>${later.length > 1 ? ` (et les ${later.length - 1} suivants)` : ''} ?<br><br>Claude sera prévenu au prochain prompt.`, '↶ Revenir')
     if (!ok) return
   }
   event({ type: 'restore', turnId: t.id, force })

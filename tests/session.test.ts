@@ -118,3 +118,44 @@ test('un fichier entièrement validé dans la page sort de la revue de ce prompt
   expect(changes).toEqual([])
   expect(accepted).toEqual([])
 })
+
+test('« Tout accepter » d’un prompt sort ses fichiers de la revue', async ($, on) => {
+  oneFile(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('store.get', () => ({ value: undefined }))
+  on('http.fetch', () => ({ value: { status: 200, ok: true, headers: {}, text: '{}' } }))
+  let seeded = true
+  const keyOf = (e: unknown) => (e as { key: string }).key
+  on('state.get', ($, e, next) =>
+    seeded && keyOf(e) === 'web' ? { value: { value: { shape: 'web-1', value: { port: 61077, token: 'cle' } }, version: 1 } } : next(e),
+  )
+  // ce que la mod écrit : on attend que la revue de a.txt soit close
+  let changes: { path: string }[] = []
+  let accepted: string[] = []
+  let closed = () => {}
+  const isClosed = new Promise<void>(r => (closed = r))
+  on('state.set', ($, e, next) => {
+    const w = e as unknown as { key: string; value: { value: unknown } }
+    if (w.key === 'web') seeded = false
+    if (w.key === 'changes') changes = w.value.value as { path: string }[]
+    if (w.key === 'accepted') accepted = w.value.value as string[]
+    if ((w.key === 'changes' || w.key === 'accepted') && changes.length === 0 && accepted.length === 0) closed()
+    return next(e)
+  })
+  let stop = () => {}
+  const alive = new Promise<void>(r => (stop = r))
+  // la page : un bloc validé, puis « Tout accepter » sur le prompt courant
+  on('process.spawn', async function* () {
+    yield { stream: 'stdout' as const, text: '{"port":61077}\n' }
+    yield { stream: 'stdout' as const, text: '{"event":{"type":"accept","keys":["/p/a.txt|x"],"on":true}}\n' }
+    yield { stream: 'stdout' as const, text: '{"event":{"type":"acceptFiles","paths":["/p/a.txt"]}}\n' }
+    await alive
+    return { value: { code: 0, signal: null } }
+  })
+
+  await $.tool.call({ tool: 'Write', file_path: '/p/a.txt', content: 'un\n' })
+  await isClosed
+  stop()
+  expect(changes).toEqual([])
+  expect(accepted).toEqual([])
+})

@@ -1,6 +1,6 @@
 {
   "name": "ide-for-claude",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "IDE dans un panneau : explorateur, éditeur et diff des modifications de Claude à accepter ou rejeter",
   "author": {
     "name": "DIGYSKY",

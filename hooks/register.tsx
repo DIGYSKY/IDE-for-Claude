@@ -620,6 +620,7 @@ type WebEvent = {
   text?: string
   id?: string
   keys?: string[]
+  paths?: unknown[]
   on?: boolean
   turnId?: number
   force?: boolean
@@ -657,6 +658,14 @@ async function onWebEvent($: $, ev: WebEvent) {
     case 'accept': {
       const keys = new Set(ev.keys ?? [])
       await update($, acceptedAtom, list => (ev.on ? [...new Set([...list, ...keys])] : list.filter(k => !keys.has(k))))
+      break
+    }
+    case 'acceptFiles': {
+      // « Tout accepter » d'un prompt : chaque fichier encore en revue sort de la revue
+      const paths = (ev.paths ?? []).filter((x): x is string => typeof x === 'string')
+      for (const path of paths) await closeReview($, path)
+      if (paths.length)
+        await notify($, { type: 'toast', text: `✅ ${paths.length} fichier${paths.length > 1 ? 's' : ''} validé${paths.length > 1 ? 's' : ''} : revue close pour ce prompt` })
       break
     }
     case 'acceptFile':

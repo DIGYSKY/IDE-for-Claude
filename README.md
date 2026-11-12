@@ -48,7 +48,7 @@ On peut passer de l'une à l'autre : la touche `w` du panneau ouvre la page web 
 - Un fichier dont tous les blocs sont acceptés sort de la revue de ce prompt : il repasse en édition normale et son onglet se ferme comme les autres. Une nouvelle modif de Claude le remet en revue
 - `Ctrl+L` : joindre la sélection pour Claude
 - Commentaires, rejets et extraits partent discrètement avec le prochain prompt, ou avec « Envoyer maintenant »
-- Historique prompt par prompt, diff de toute la session, ↶ revenir avant un prompt ; chaque fichier indique le sous-agent (🤖) et l'outil (⚙️ Bash, 📓 notebook) quand ce n'est pas Claude avec `Edit`/`Write`
+- Historique prompt par prompt : le prompt en cours est mis en évidence, avec ✅ Tout accepter (ses fichiers encore en revue en sortent) et ❌ Tout refuser (ses fichiers reviennent à leur état d'avant, Claude est prévenu) ; diff de toute la session, ↶ revenir avant un prompt plus ancien ; chaque fichier indique le sous-agent (🤖) et l'outil (⚙️ Bash, 📓 notebook) quand ce n'est pas Claude avec `Edit`/`Write`
 - 🧪 Tests : lancer la commande de test du projet (devinée : `npm test`, `pytest`, `cargo test`, `go test ./...`, `make test`…, modifiable et gardée par projet), voir la sortie en direct, puis 📎 joindre le résultat pour Claude
 - Badges git et comparaison avec `git HEAD`
 - Activité de Claude en direct, son et notification de fin
