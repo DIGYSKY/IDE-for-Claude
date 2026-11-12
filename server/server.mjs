@@ -47,6 +47,9 @@ let extra = {}
 const EXTRA = ['project', 'queue', 'plan', 'busy', 'status', 'ide', 'editor', 'commands']
 
 const clients = new Set()
+let noClientSince = Date.now()
+/** les questions de Claude en attente : id -> { questions, answer, waiters } */
+const questions = new Map()
 const watched = new Set()
 const emit = (event) => console.log(JSON.stringify({ event }))
 
@@ -469,6 +472,16 @@ const server = http.createServer(async (req, res) => {
     if (route === 'POST /api/event') {
       const ev = await body(req)
       if (ev.type === 'prefs') prefs = ev.prefs ?? null
+      // la réponse à une question de Claude, ou « je réponds dans le terminal »
+      if (ev.type === 'question.answer' || ev.type === 'question.terminal') {
+        const x = questions.get(String(ev.id))
+        if (x && !x.answer) {
+          x.answer = ev.type === 'question.answer' ? { answers: ev.answers ?? {} } : { terminal: true }
+          for (const w of x.waiters.splice(0)) w()
+          send({ type: 'questionClosed', id: ev.id })
+        }
+        return json(res, 200, { ok: true })
+      }
       emit(ev)
       return json(res, 200, { ok: true })
     }
@@ -538,8 +551,54 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' })
       res.write(': ok\n\n')
       clients.add(res)
-      req.on('close', () => clients.delete(res))
+      req.on('close', () => {
+        clients.delete(res)
+        if (!clients.size) noClientSince = Date.now()
+      })
+      // une question de Claude encore sans réponse est remontrée à la page qui (re)vient
+      for (const [id, x] of questions) if (!x.answer) res.write(`data: ${JSON.stringify({ type: 'question', id, questions: x.questions })}\n\n`)
       return
+    }
+
+    // une question de Claude (AskUserQuestion) : la mod la confie à la page, puis attend la réponse
+    if (route === 'POST /api/question/open') {
+      const { id, questions: qs } = await body(req)
+      if (!clients.size) return json(res, 200, { clients: 0 })
+      questions.set(String(id), { questions: qs, answer: null, waiters: [] })
+      send({ type: 'question', id, questions: qs })
+      return json(res, 200, { clients: clients.size })
+    }
+    // attente courte (4 s au plus) : la mod redemande tant que rien n'est venu
+    if (route === 'GET /api/question') {
+      const x = questions.get(String(q('id')))
+      if (!x) return json(res, 200, { gone: true })
+      const answer = () => {
+        questions.delete(String(q('id')))
+        json(res, 200, x.answer)
+      }
+      if (x.answer) return answer()
+      // plus aucune page ouverte depuis 15 s : la question repart dans le terminal
+      if (!clients.size && Date.now() - noClientSince > 15_000) {
+        questions.delete(String(q('id')))
+        send({ type: 'questionClosed', id: q('id') })
+        return json(res, 200, { terminal: true, reason: 'page fermée' })
+      }
+      const timer = setTimeout(() => {
+        x.waiters = x.waiters.filter((w) => w !== wake)
+        json(res, 200, { pending: true })
+      }, 4000)
+      const wake = () => {
+        clearTimeout(timer)
+        answer()
+      }
+      x.waiters.push(wake)
+      return
+    }
+    if (route === 'POST /api/question/close') {
+      const { id } = await body(req)
+      questions.delete(String(id))
+      send({ type: 'questionClosed', id })
+      return json(res, 200, { ok: true })
     }
 
     json(res, 404, { error: 'introuvable' })

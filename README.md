@@ -72,13 +72,20 @@ Le contexte joint (emplacements des fichiers, idées, revue) apparaît sous le p
 
 Le premier onglet de l'éditeur, fixe (il ne se ferme pas et reste à gauche même quand les onglets défilent), affiche la conversation avec Claude Code : tes prompts, ses réponses en markdown (code coloré, chemins `fichier:ligne` cliquables) et ses appels d'outils, dépliables pour voir leur résultat. 🔧 Outils les masque, ⇩ Suivre garde la fin à l'écran. Elle se met à jour pendant que Claude travaille ; un ● sur l'onglet signale du nouveau quand tu es sur un fichier. L'éditeur de prompt reste en bas, toujours disponible.
 
+- **Taille du texte** : A− / A+ dans la barre de la conversation (ou `Alt+=` / `Alt+-`, macOS `⌃=` / `⌃-`), de 11 à 32 px ; le pourcentage remet la taille par défaut. Elle vaut aussi pour les questions de Claude, et se règle dans ⚙️
+- **🖼 Artefacts** : ceux que Claude publie pendant la session (outil Artifact) s'affichent en carte dans la conversation, et le bouton 🖼 Artefacts liste tout : titre, description, nombre de versions, Ouvrir ↗, Copier le lien, le fichier source
+
+### ❓ Les questions de Claude
+
+Quand Claude te pose une question (ses QCM, l'outil AskUserQuestion) et que la page est ouverte, elle s'affiche au-dessus du prompt, avec un son et une notification si la page est en arrière-plan. Un clic sur une réponse suffit pour une question simple ; pour plusieurs questions ou des choix multiples, coche puis « Répondre ». « Autre réponse » permet d'écrire la tienne. « ↩ Répondre dans le terminal » renvoie la question à Claude Code. Si la page est fermée (ou l'est depuis 15 s), la question se pose dans le terminal comme d'habitude. Désactivable dans ⚙️.
+
 ### 📊 Claude Status
 
 Le bouton en haut ouvre un tableau de bord de la session et de Claude, actualisé toutes les 15 s :
 
 - **Session** : modèle, effort, durée, nombre de prompts, fichiers modifiés, lignes ajoutées et retirées, temps de réponse de l'API et des outils, version de Claude Code
 - **Contexte** : remplissage, tokens restants avant le compactage automatique, répartition comme `/context` (prompt système, outils, MCP, mémoire, skills, messages), cache de la dernière requête
-- **Limites** : fenêtres de 5 heures et de 7 jours, réinitialisation, et le rythme : à quel pourcentage tu finiras la fenêtre si tu continues ainsi
+- **Limites** : fenêtres de 5 heures et de 7 jours, réinitialisation, et le rythme : à quel pourcentage tu finiras la fenêtre si tu continues ainsi, ou dans combien de temps tu atteindras la limite
 - **Coût de la session** au prix de l'API, par prompt et par modèle (entrée, sortie, cache), part de l'entrée servie par le cache
 - **Ce mois-ci**, tous projets : le total au prix de l'API et sa projection. Indique le prix de ton abonnement pour voir ce qu'il vaut au prix de l'API et le **coût réel estimé** de la session (sa part de l'abonnement)
 - **Projet** : le coût total de toutes ses sessions, par jour sur 30 jours, et la liste des sessions (titre, durée, modèles, coût)

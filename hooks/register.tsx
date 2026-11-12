@@ -672,6 +672,10 @@ type IdeSettings = {
   statuslineSource: 'claude' | 'template'
   /** prix de l'abonnement Claude, en $ par mois (0 : non renseigné), pour comparer au prix API */
   planPrice: number
+  /** les questions de Claude (QCM) se répondent dans la page quand elle est ouverte */
+  askInPage: boolean
+  /** taille du texte de la conversation, en px */
+  convFont: number
 }
 const IDE_DEFAULTS: IdeSettings = {
   autoOpenPane: true,
@@ -681,6 +685,8 @@ const IDE_DEFAULTS: IdeSettings = {
   statusline: '{model} · contexte {context} · {cost} · {branch}',
   statuslineSource: 'claude',
   planPrice: 0,
+  askInPage: true,
+  convFont: 14,
 }
 async function ideSettings($: $): Promise<IdeSettings> {
   const s = (await $.store.get('ide').catch(() => undefined)) as Partial<IdeSettings> | undefined
@@ -1061,6 +1067,25 @@ async function post($: $, route: string, payload: unknown) {
       body: JSON.stringify(payload),
     })
     .catch(() => undefined)
+}
+
+/** Une requête au serveur de la page dont on lit la réponse ; null si la page n'est pas là. */
+async function askServer($: $, route: string, payload?: unknown): Promise<Record<string, unknown> | null> {
+  const web = await read($, webAtom)
+  if (!web || !server || !ready) return null
+  const r = await $.http
+    .fetch(`http://127.0.0.1:${web.port}${route}`, {
+      method: payload === undefined ? 'GET' : 'POST',
+      headers: { 'content-type': 'application/json', 'x-token': web.token },
+      ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+    })
+    .catch(() => null)
+  if (!r || !r.ok) return null
+  try {
+    return JSON.parse(r.text) as Record<string, unknown>
+  } catch {
+    return null
+  }
 }
 
 /** Envoie au serveur tout l'état de la session : la page se met à jour en direct. */
@@ -1603,6 +1628,33 @@ export const register: Register = on => {
   })
 
   // le plan de Claude : sa liste de tâches, en direct dans la page (celle de Claude, pas des sous-agents)
+  // une question de Claude (QCM) : si la page est ouverte, on y répond ; sinon, ou sur demande, le terminal la pose
+  on('tool.call', { tool: 'AskUserQuestion' }, async ($, e, next) => {
+    if (e.agentId !== undefined || !(await ideSettings($)).askInPage) return next(e)
+    const questions = (e as unknown as { questions?: unknown[] }).questions
+    if (!Array.isArray(questions) || !questions.length) return next(e)
+    const id = (e as unknown as { tool_use_id?: string }).tool_use_id || newId()
+    const open = await askServer($, '/api/question/open', { id, questions })
+    if (!open || !open.clients) return next(e)
+    $.ui.toast('❓ Claude te pose une question : réponds dans la page IDE for Claude', { timeoutMs: 8000 })
+    // chaque attente est un appel au serveur (4 s au plus) : le temps d'un crochet ne s'écoule pas pendant
+    for (;;) {
+      if (next.signal.aborted) {
+        void askServer($, '/api/question/close', { id })
+        return next(e)
+      }
+      const r = await askServer($, `/api/question?id=${encodeURIComponent(id)}`)
+      if (!r || r.terminal || r.gone) {
+        if (r?.reason) $.ui.toast(`❓ La question repasse dans le terminal (${String(r.reason)})`)
+        return next(e)
+      }
+      if (r.answers && typeof r.answers === 'object') {
+        const answers = Object.fromEntries(Object.entries(r.answers).map(([k, v]) => [k, String(v)]))
+        return { result: { questions, answers } as never }
+      }
+    }
+  })
+
   on('tool.call', { tool: 'TodoWrite' }, async ($, e, next) => {
     const done = await next(e)
     if (e.agentId === undefined && Array.isArray(e.todos)) {

@@ -6,6 +6,7 @@ type $ = EngineInterface
 // ---------- conversation ----------
 
 export type ConvTool = { tool: string; label: string; isError?: boolean; out?: string; agentId?: string }
+export type ConvArtifact = { url: string; title: string; description?: string; icon?: string; path?: string; versions: number; i: number }
 export type ConvItem = { i: number; role: 'user' | 'assistant'; text: string; tools?: ConvTool[]; kind?: 'summary' | 'command' }
 
 const MAX_OUT = 1500
@@ -40,6 +41,12 @@ export function toolLabel(cwd: string, tool: string, input: Record<string, unkno
       return `🌐 cherche « ${s(input.query, 80)} »`
     case 'TodoWrite':
       return '📋 met à jour le plan'
+    case 'AskUserQuestion': {
+      const q = Array.isArray(input.questions) ? (input.questions[0] as { question?: string } | undefined) : undefined
+      return `❓ question : ${s(q?.question, 120)}`
+    }
+    case 'Artifact':
+      return `🖼 artefact : ${s(input.action || 'publish')} ${input.file_path ? rel(String(input.file_path)) : s(input.url)}`
     case 'Skill':
       return `🧩 skill ${s(input.skill || input.command, 60)}`
     default: {
@@ -91,7 +98,53 @@ export async function conversation($: $, from = 0) {
     items.push({ i, role: 'assistant', text: clip(m.text, MAX_TEXT), ...(tools.length ? { tools } : {}) })
   }
   const head = msgs[0]
-  return { total: msgs.length, first: head ? `${head.role}:${head.text.slice(0, 80)}` : '', from, items }
+  return { total: msgs.length, first: head ? `${head.role}:${head.text.slice(0, 80)}` : '', from, items, artifacts: await artifactsOf($, cwd, msgs) }
+}
+
+// ---------- artefacts publiés pendant la session (outil Artifact) ----------
+
+const ARTIFACT_URL = /https:\/\/claude\.ai\/[^\s)"'\]<>]*artifact\/[^\s)"'\]<>,.]+/
+const titleCache = new Map<string, string | null>()
+
+async function htmlTitle($: $, path: string) {
+  if (!titleCache.has(path)) {
+    const text = await $.fs.read(path).catch(() => null)
+    const t = typeof text === 'string' ? text.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() : undefined
+    titleCache.set(path, t || null)
+  }
+  return titleCache.get(path) ?? undefined
+}
+
+/** Les artefacts publiés dans la conversation, du plus récent au plus ancien, chacun une fois. */
+export async function artifactsOf($: $, cwd: string, msgs: readonly { role: string; toolUses: readonly { tool: string; input?: Record<string, unknown>; text?: string; isError?: true }[] }[]) {
+  const byUrl = new Map<string, ConvArtifact>()
+  for (let i = 0; i < msgs.length; i++) {
+    for (const u of msgs[i]!.toolUses) {
+      if (u.tool !== 'Artifact' || u.isError || !u.text) continue
+      const input = u.input ?? {}
+      const action = String(input.action ?? 'publish')
+      if (action !== 'publish' || input.asset) continue
+      const url = u.text.match(ARTIFACT_URL)?.[0] ?? (typeof input.url === 'string' ? input.url : undefined)
+      if (!url) continue
+      const path = typeof input.file_path === 'string' ? (input.file_path.startsWith('/') ? input.file_path : `${cwd}/${input.file_path}`) : undefined
+      const prev = byUrl.get(url)
+      const title =
+        (path && /\.html?$/i.test(path) ? await htmlTitle($, path) : undefined) ||
+        (typeof input.title === 'string' ? input.title : undefined) ||
+        prev?.title ||
+        (path ? path.split('/').pop()!.replace(/\.[^.]+$/, '') : 'Artefact')
+      byUrl.set(url, {
+        url,
+        title,
+        ...(typeof input.description === 'string' ? { description: input.description } : prev?.description ? { description: prev.description } : {}),
+        ...(typeof input.icon === 'string' ? { icon: input.icon } : prev?.icon ? { icon: prev.icon } : {}),
+        ...(path ? { path } : {}),
+        versions: (prev?.versions ?? 0) + 1,
+        i,
+      })
+    }
+  }
+  return [...byUrl.values()].sort((a, b) => b.i - a.i)
 }
 
 // ---------- coûts : les fichiers de session de Claude Code ----------

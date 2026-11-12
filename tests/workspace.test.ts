@@ -318,3 +318,62 @@ test('Claude Status : contexte, limites, coût de la session et des sessions pas
   expect(d.project.total).toBe(6.5)
   expect(d.month).toMatchObject({ usd: 6.5, sessions: 2, projects: 1 })
 })
+
+test('une question de Claude se répond dans la page quand elle est ouverte ; le terminal ne la pose pas', async ($, on) => {
+  const w = workspace(on)
+  let polls = 0
+  on('http.fetch', (_$, e) => {
+    if (e.url.endsWith('/api/question/open')) return { value: { status: 200, ok: true, headers: {}, text: '{"clients":1}' } }
+    if (e.url.includes('/api/question?id=')) {
+      polls++
+      const text = polls < 2 ? '{"pending":true}' : JSON.stringify({ answers: { 'Quel nom ?': 'Bleu' } })
+      return { value: { status: 200, ok: true, headers: {}, text } }
+    }
+    return { value: { status: 200, ok: true, headers: {}, text: '{}' } }
+  })
+  on('state.get', ($, e, next) =>
+    (e as unknown as { key: string }).key === 'web' && !('web' in w.state)
+      ? { value: { value: { shape: 'web-1', value: { port: 61077, token: 'cle' } }, version: 1 } }
+      : next(e),
+  )
+  let stop = () => {}
+  const alive = new Promise<void>(r => (stop = r))
+  let started = () => {}
+  const isStarted = new Promise<void>(r => (started = r))
+  on('process.spawn', async function* () {
+    yield { stream: 'stdout' as const, text: '{"port":61077}\n' }
+    started()
+    await alive
+    return { value: { code: 0, signal: null } }
+  })
+  let terminal = false
+  on('tool.call', { tool: 'AskUserQuestion' }, () => ((terminal = true), { result: { questions: [], answers: {} } as never }))
+
+  await $.tool.call({ tool: `${T}command_save`, name: 'x', command: 'true' } as never)
+  await isStarted
+  await new Promise(r => setTimeout(r, 50))
+  const questions = [{ question: 'Quel nom ?', header: 'Nom', multiSelect: false, options: [{ label: 'Bleu', description: '' }, { label: 'Vert', description: '' }] }]
+  const r = (await $.tool.call({ tool: 'AskUserQuestion', questions } as never)) as unknown as { result: { answers: Record<string, string> } }
+  stop()
+  expect(terminal).toBe(false)
+  expect(r.result.answers).toEqual({ 'Quel nom ?': 'Bleu' })
+  expect(polls).toBe(2)
+})
+
+test('les artefacts publiés pendant la session partent avec la conversation', async ($, on) => {
+  const w = workspace(on, { '/p/rapport.html': '<html><head><title>Rapport mensuel</title></head></html>' })
+  const pub = (n: number) => ({
+    role: 'assistant',
+    text: '',
+    toolUses: [{ tool_use_id: `a${n}`, tool: 'Artifact', input: { file_path: '/p/rapport.html', description: 'Les chiffres du mois' }, text: `Published https://claude.ai/code/artifact/1234-abcd (version ${n})` }],
+  })
+  on('session.messages', () => ({ value: [{ role: 'user', text: 'Fais un rapport', toolUses: [] }, pub(1), pub(2)] as never }))
+  const pg = page(on, w, [{ type: 'conversation', from: 0 }])
+  const got = pg.next('conversation')
+  await $.tool.call({ tool: `${T}command_save`, name: 'x', command: 'true' } as never)
+  const c = await got
+  pg.stop()
+  expect(c.artifacts).toEqual([
+    { url: 'https://claude.ai/code/artifact/1234-abcd', title: 'Rapport mensuel', description: 'Les chiffres du mois', path: '/p/rapport.html', versions: 2, i: 2 },
+  ])
+})

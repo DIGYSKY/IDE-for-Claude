@@ -273,37 +273,62 @@
   /* la conversation */
   #convView { display: flex; flex-direction: column; min-height: 0; }
   #convBar { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-bottom: 1px solid var(--border); flex: none; }
-  #convList { flex: 1; overflow: auto; padding: 12px 0 24px; }
-  .msg { max-width: 900px; margin: 0 auto; padding: 4px 20px; }
+  #convList { flex: 1; overflow: auto; padding: 12px 0 24px; --conv-font: 14px; }
+  #convSize { min-width: 44px; font-variant-numeric: tabular-nums; }
+  .msg { max-width: min(100%, 68em); margin: 0 auto; padding: 4px 20px; font-size: var(--conv-font); }
+  .msg .md, .msg .bubble { line-height: 1.6; }
   .msg.ai.cont { padding-top: 0; padding-bottom: 0; }
-  .msg .who { font-size: 11px; font-weight: 600; color: var(--muted); margin: 10px 0 3px; text-transform: uppercase; letter-spacing: .04em; }
+  .msg .who { font-size: max(11px, .78em); font-weight: 600; color: var(--muted); margin: 10px 0 3px; text-transform: uppercase; letter-spacing: .04em; }
   .msg.ai .who { color: var(--accent); }
   .msg.user .bubble { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; white-space: pre-wrap; word-break: break-word; }
-  .msg.cmd .bubble { font: 12px ui-monospace, monospace; color: var(--muted); background: transparent; border-style: dashed; padding: 4px 10px; white-space: pre-wrap; }
+  .msg.cmd .bubble { font-family: ui-monospace, monospace; font-size: .88em; color: var(--muted); background: transparent; border-style: dashed; padding: 4px 10px; white-space: pre-wrap; }
   .msg details.sum { border: 1px dashed var(--border); border-radius: 8px; padding: 4px 10px; color: var(--muted); }
   .msg details.sum summary { cursor: pointer; }
   .md { line-height: 1.55; word-break: break-word; }
   .md > :first-child { margin-top: 0; } .md > :last-child { margin-bottom: 0; }
   .md p { margin: 6px 0; } .md ul, .md ol { margin: 6px 0; padding-left: 22px; }
-  .md h1, .md h2, .md h3, .md h4 { margin: 12px 0 6px; line-height: 1.3; } .md h1 { font-size: 17px; } .md h2 { font-size: 15px; } .md h3, .md h4 { font-size: 13.5px; }
-  .md code { font: 12px ui-monospace, Menlo, monospace; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+  .md h1, .md h2, .md h3, .md h4 { margin: .9em 0 .45em; line-height: 1.3; } .md h1 { font-size: 1.3em; } .md h2 { font-size: 1.15em; } .md h3, .md h4 { font-size: 1.03em; }
+  .md code { font-family: ui-monospace, Menlo, monospace; font-size: .88em; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
   .md pre { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; overflow: auto; }
-  .md pre code { background: none; border: 0; padding: 0; font-size: 12px; line-height: 1.45; }
+  .md pre code { background: none; border: 0; padding: 0; font-size: .88em; line-height: 1.5; }
   .md table { border-collapse: collapse; margin: 6px 0; display: block; overflow: auto; }
   .md th, .md td { border: 1px solid var(--border); padding: 3px 8px; text-align: left; }
   .md th { background: var(--panel); }
   .md blockquote { margin: 6px 0; padding: 0 10px; border-left: 3px solid var(--border); color: var(--muted); }
   .md a { color: var(--accent); }
   .tools { margin: 2px 0; }
-  .tool { font-size: 12px; color: var(--muted); }
+  .tool { font-size: .88em; color: var(--muted); }
   .tool summary { cursor: pointer; padding: 1px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; list-style: none; }
   .tool summary::before { content: '▸ '; } .tool[open] summary::before { content: '▾ '; }
   .tool summary:hover { color: var(--text); }
   .md code.flink { cursor: pointer; text-decoration: underline dotted; } .md code.flink:hover { color: var(--accent); }
   .tool.err summary { color: var(--bad); }
-  .tool pre { margin: 2px 0 6px 14px; padding: 6px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; font: 11.5px/1.4 ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow: auto; color: var(--text); }
+  .tool pre { margin: 2px 0 6px 14px; padding: 6px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; font-family: ui-monospace, monospace; font-size: .95em; line-height: 1.45; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow: auto; color: var(--text); }
   #convView.notools .tools { display: none; }
-  .convBusy { max-width: 900px; margin: 10px auto 0; padding: 0 20px; color: var(--accent); }
+  .convBusy { max-width: min(100%, 68em); margin: 10px auto 0; padding: 0 20px; color: var(--accent); font-size: var(--conv-font); }
+  /* artefacts publiés */
+  #convArts { flex: none; max-height: 40%; overflow: auto; border-bottom: 1px solid var(--border); background: var(--panel); padding: 8px 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+  .art { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .art .tt { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .art .ds { color: var(--muted); font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .art .ac { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; align-items: center; } .art .ac a { color: var(--accent); white-space: nowrap; }
+  .art .ac small { color: var(--muted); margin-left: auto; }
+  .artInline { display: inline-flex; gap: 8px; align-items: center; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; margin: 4px 0; background: var(--panel); font-size: .92em; }
+  .artInline a { color: var(--accent); }
+  /* une question de Claude, au-dessus du prompt */
+  #question { border: 2px solid var(--accent); border-radius: 10px; background: var(--accent-soft); padding: 10px 12px; margin: 6px 10px; max-height: 50vh; overflow: auto; font-size: var(--conv-font, 14px); }
+  #question .qh { display: flex; gap: 8px; align-items: baseline; font-weight: 600; margin-bottom: 6px; }
+  #question .qh .r { margin-left: auto; font-weight: 400; }
+  #question .qq { margin: 8px 0; }
+  #question .qq b { display: block; margin-bottom: 4px; }
+  #question .chip { font-size: .78em; border: 1px solid var(--accent); color: var(--accent); border-radius: 8px; padding: 0 6px; margin-right: 6px; font-weight: 500; }
+  #question .opts { display: flex; flex-direction: column; gap: 4px; }
+  #question .opt { display: flex; gap: 8px; align-items: flex-start; text-align: left; white-space: normal; padding: 6px 10px; background: var(--bg); }
+  #question .opt.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  #question .opt small { display: block; color: var(--muted); font-size: .85em; }
+  #question .opt pre { margin: 4px 0 0; font-size: .8em; white-space: pre-wrap; color: var(--muted); }
+  #question .other { margin-top: 4px; }
+  #question .qa { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
   .convEmpty { color: var(--muted); text-align: center; padding: 40px 20px; }
   /* tableau de bord Claude Status */
   #dash { padding-top: 5vh; }
@@ -427,9 +452,12 @@
       <div id="diff" hidden></div>
       <div id="convView" hidden>
         <div id="convBar"><b>💬 Conversation</b><span id="convCount" class="hint"></span><span class="spacer"></span>
+          <button id="convArtsBtn" title="Les artefacts publiés pendant la session" hidden></button>
+          <span class="seg" title="Taille du texte de la conversation"><button id="convSmaller" aria-label="Texte plus petit">A−</button><button id="convSize" title="Taille par défaut"></button><button id="convBigger" aria-label="Texte plus grand">A+</button></span>
           <button id="convTools" title="Afficher les appels d'outils de Claude">🔧 Outils</button>
           <button id="convFollow" class="on" title="Suivre la fin de la conversation">⇩ Suivre</button>
           <button id="convReload" title="Recharger toute la conversation">↻</button></div>
+        <div id="convArts" hidden></div>
         <div id="convList"></div>
       </div>
       <div id="runView" hidden>
@@ -442,6 +470,7 @@
     <div id="dock">
       <div id="dockSplit" title="Glisser pour agrandir"></div>
       <details id="plan" hidden><summary id="planSum"></summary><ol id="planList"></ol></details>
+      <div id="question" hidden></div>
       <div id="pendingBar" hidden></div>
       <div id="queue"></div>
       <div id="promptRow"><div id="promptEd"></div>
@@ -1638,6 +1667,8 @@ const KEYMAP = [
   ['side.toggle', 'Navigation', 'Masquer ou afficher la barre latérale', ['Mod+B']],
   ['conv.open', 'Navigation', 'Conversation (et retour au fichier)', [`${LK}+0`]],
   ['dash.open', 'Navigation', 'Claude Status', [`${LK}+9`]],
+  ['conv.bigger', 'Navigation', 'Conversation : texte plus grand', [`${LK}+=`]],
+  ['conv.smaller', 'Navigation', 'Conversation : texte plus petit', [`${LK}+-`]],
   ...PANELS.map(([p, label], i) => [`panel.${p}`, 'Navigation', `Panneau ${label}`, [`${LK}+${i + 1}`]]),
   ['prompt.focus', 'Prompt et commandes', 'Aller dans l\'éditeur de prompt, et en revenir', ['Mod+K']],
   // sur Mac, Chrome garde souvent ⌘L pour sa barre d'adresse : ⌃L d'abord
@@ -1836,6 +1867,8 @@ function runShortcut(id) {
       if (isChanged(cur)) return toast('Ce fichier est en revue : valide-le pour pouvoir fermer son onglet')
       return closeTab(cur)
     case 'conv.open': return view.kind === 'conv' ? void (cur ? openFile(cur) : (view = { kind: 'file' }, show(null), renderTabs())) : openConv()
+    case 'conv.bigger': return stepConvFont(1)
+    case 'conv.smaller': return stepConvFont(-1)
     case 'dash.open': return $('dash').classList.contains('show') ? closeDash() : openDash()
     case 'file.open': return void quickOpen()
     case 'file.save': return void save()
@@ -2008,6 +2041,8 @@ function renderSettings() {
     const putP = (k, v) => { P[k] = v; savePrefs() }
     body.append(h('h3', {}, 'Claude et la revue'),
       setRow('Ouvrir le panneau du terminal tout seul', 'À la première modif de Claude, quand la page web n\'est pas ouverte', control('bool', ide.autoOpenPane, (v) => put('autoOpenPane', v))),
+      setRow('Questions de Claude dans la page', 'Quand la page est ouverte, ses QCM s\'affichent au-dessus du prompt et tu y réponds ici (sinon, dans le terminal)', control('bool', ide.askInPage !== false, (v) => put('askInPage', v))),
+      setRow('Taille du texte de la conversation', 'En pixels (14 par défaut). Aussi avec A− / A+ dans la conversation', control('number', convFont(), (v) => { put('convFont', Math.max(10, Math.min(40, Number(v) || 14))); applyConvFont() })),
       setRow('Validation automatique', 'Dès qu\'un prompt part, tous les fichiers encore en revue sont validés d\'office', control('bool', !!ide.autoAccept, (v) => put('autoAccept', v))),
       setRow('Joindre la revue au prochain prompt', 'Commentaires, rejets, idées et extraits partent avec ton prochain prompt', control('bool', ide.attachReview, (v) => put('attachReview', v))),
       setRow('Conserver l\'historique', 'En jours, pour chaque session', control('number', ide.historyDays, (v) => put('historyDays', v))),
@@ -2124,6 +2159,7 @@ async function refreshState() {
     prefsLoaded = true
     applyLayoutPrefs()
     applyConvTools()
+    renderConvArts()
   }
   await refreshGit()
   renderTabs()
@@ -2137,6 +2173,7 @@ async function refreshState() {
   updatePromptHint()
   renderStatus()
   applyEditorSettings()
+  applyConvFont()
   $('allOk').hidden = !srv.changes.length
   $('allOk').textContent = `✅ Tout valider (${srv.changes.length})`
   const f = cur && files.get(cur)
@@ -2162,6 +2199,8 @@ function connect() {
     if (ev.type === 'toast') return toast(ev.text)
     // le terminal n'a pas pu prendre le prompt : il revient dans l'éditeur
     if (ev.type === 'conversation') return onConversation(ev)
+    if (ev.type === 'question') return onQuestion(ev)
+    if (ev.type === 'questionClosed') { if (question && question.id === ev.id) { question = null; renderQuestion() } return }
     if (ev.type === 'convChanged') return convChanged()
     if (ev.type === 'dashboard') { dash.data = ev.data; if ($('dash').classList.contains('show')) renderDash(); return }
     if (ev.type === 'promptBack') { if (!promptEd.getValue().trim()) promptEd.setValue(ev.text || ''); return }
@@ -2252,6 +2291,11 @@ function onConversation(ev) {
   conv.first = ev.first
   conv.total = ev.total
   conv.loaded = true
+  const before = (conv.artifacts || []).length
+  conv.artifacts = ev.artifacts || []
+  if (conv.loadedArts && conv.artifacts.length > before) toast(`🖼 Nouvel artefact : ${conv.artifacts[0].title}`)
+  conv.loadedArts = true
+  renderConvArts()
   if (view.kind === 'conv') renderConv()
 }
 /** le markdown de Claude, nettoyé ; les chemins de fichiers du projet s'ouvrent d'un clic */
@@ -2278,6 +2322,24 @@ function colorizeCode(el) {
   if (!monaco.languages.getLanguages().some((l) => l.id === id)) return
   monaco.editor.colorize(el.textContent, id, { tabSize: 2 }).then((html) => { el.innerHTML = html }).catch(() => {})
 }
+/** un artefact publié, en carte cliquable */
+function artLinks(a) {
+  return [h('a', { href: a.url, target: '_blank', rel: 'noopener' }, 'Ouvrir ↗'),
+    h('a', { href: '#', onclick: (ev) => { ev.preventDefault(); navigator.clipboard?.writeText(a.url).then(() => toast('🔗 Lien copié')) } }, 'Copier le lien'),
+    a.path ? h('a', { href: '#', title: a.path, onclick: (ev) => { ev.preventDefault(); openFile(a.path) } }, 'Fichier') : null]
+}
+function renderConvArts() {
+  const arts = conv.artifacts || []
+  const btn = $('convArtsBtn')
+  btn.hidden = !arts.length
+  btn.textContent = `🖼 Artefacts (${arts.length})`
+  btn.classList.toggle('on', !!P.convArts)
+  $('convArts').hidden = !arts.length || !P.convArts
+  $('convArts').replaceChildren(...arts.map((a) => h('div', { class: 'art' },
+    h('div', { class: 'tt', title: a.title }, '🖼 ' + a.title),
+    a.description ? h('div', { class: 'ds', title: a.description }, a.description) : null,
+    h('div', { class: 'ac' }, ...artLinks(a), a.versions > 1 ? h('small', {}, `${a.versions} versions`) : null))))
+}
 function convNode(x, prevRole) {
   if (x.role === 'user') {
     if (x.kind === 'summary') return h('div', { class: 'msg user' }, h('details', { class: 'sum' }, h('summary', {}, '📦 Résumé du compactage de la conversation'), md(x.text)))
@@ -2287,6 +2349,11 @@ function convNode(x, prevRole) {
   return h('div', { class: 'msg ai' + (prevRole === 'assistant' ? ' cont' : '') },
     prevRole === 'assistant' ? null : h('div', { class: 'who' }, 'Claude'),
     x.text ? md(x.text) : null,
+    // un artefact publié se montre en carte, même outils masqués
+    ...(x.tools || []).filter((t) => t.tool === 'Artifact').map((t) => {
+      const a = (conv.artifacts || []).find((y) => t.out && t.out.includes(y.url))
+      return a ? h('div', { class: 'artInline' }, '🖼 ', h('b', {}, a.title), ...artLinks(a)) : null
+    }),
     x.tools ? h('div', { class: 'tools' }, x.tools.map((t) => h('details', { class: 'tool' + (t.isError ? ' err' : '') },
       h('summary', { title: t.label }, (t.isError ? '❌ ' : '') + t.label),
       t.out ? h('pre', {}, t.out) : h('pre', {}, t.isError ? 'Erreur' : '…')))) : null)
@@ -2320,9 +2387,102 @@ function renderConvBusy() {
   conv.busyEl.replaceChildren(h('span', { class: 'spin' }, '◐'), ' Claude travaille…')
 }
 function convToEnd() { const l = $('convList'); l.scrollTop = l.scrollHeight }
+const CONV_FONT = [11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 28, 32]
+const convFont = () => (srv.ide && Number(srv.ide.convFont)) || 14
+function applyConvFont() {
+  const px = convFont()
+  $('convList').style.setProperty('--conv-font', px + 'px')
+  $('dock').style.setProperty('--conv-font', px + 'px')
+  $('convSize').textContent = Math.round((px / 14) * 100) + ' %'
+}
+function stepConvFont(dir) {
+  const px = convFont()
+  const next = dir === 0 ? 14 : dir > 0 ? CONV_FONT.find((x) => x > px) || px : [...CONV_FONT].reverse().find((x) => x < px) || px
+  srv.ide = { ...(srv.ide || {}), convFont: next }
+  event({ type: 'ide.set', settings: { convFont: next } })
+  applyConvFont()
+  if (conv.follow) convToEnd()
+}
 function applyConvTools() {
   $('convView').classList.toggle('notools', P.convTools === false)
   $('convTools').classList.toggle('on', P.convTools !== false)
+}
+
+// ---------- ❓ les questions de Claude (QCM), au-dessus du prompt ----------
+let question = null // { id, questions, picks: { [i]: Set }, other: { [i]: string } }
+function onQuestion(ev) {
+  question = { id: ev.id, questions: ev.questions || [], picks: {}, other: {} }
+  renderQuestion()
+  if (P.sound !== false) beep()
+  if ('Notification' in window && Notification.permission === 'granted' && document.hidden)
+    new Notification('Claude te pose une question', { body: (question.questions[0] || {}).question || '', tag: 'ide-for-claude-q-' + srv.name })
+  if (document.hidden && !document.title.startsWith('❓')) {
+    const t = document.title
+    document.title = '❓ ' + t
+    const back = () => { document.title = t; document.removeEventListener('visibilitychange', back) }
+    document.addEventListener('visibilitychange', back)
+  }
+}
+function questionAnswers() {
+  const out = {}
+  question.questions.forEach((q, i) => {
+    const other = (question.other[i] || '').trim()
+    const picks = [...(question.picks[i] || [])]
+    const v = other ? [...picks, other] : picks
+    if (v.length) out[q.question] = v.join(', ')
+  })
+  return out
+}
+function renderQuestion() {
+  const box = $('question')
+  box.hidden = !question
+  if (!question) return box.replaceChildren()
+  const q0 = question.questions
+  const send = h('button', { class: 'primary' }, 'Répondre')
+  const refresh = () => {
+    const a = questionAnswers()
+    send.disabled = !q0.every((q) => a[q.question])
+  }
+  const parts = q0.map((q, i) => {
+    question.picks[i] = question.picks[i] || new Set()
+    const opts = (q.options || []).map((o) => {
+      const on = question.picks[i].has(o.label)
+      const b = h('button', { class: 'opt' + (on ? ' on' : '') },
+        h('span', {}, q.multiSelect ? (on ? '☑' : '☐') : (on ? '◉' : '○')),
+        h('span', {}, o.label, o.description ? h('small', {}, o.description) : null, o.preview ? h('pre', {}, o.preview) : null))
+      b.onclick = () => {
+        const set = question.picks[i]
+        if (q.multiSelect) set.has(o.label) ? set.delete(o.label) : set.add(o.label)
+        else { set.clear(); set.add(o.label); question.other[i] = '' }
+        // une seule question à choix unique : un clic suffit
+        if (!q.multiSelect && q0.length === 1) return answerQuestion()
+        renderQuestion()
+      }
+      return b
+    })
+    const other = h('input', { type: 'text', class: 'other', placeholder: q.kind === 'number' ? 'Un nombre…' : opts.length ? 'Autre réponse (facultatif)…' : (q.placeholder || 'Ta réponse…') })
+    other.value = question.other[i] || ''
+    other.oninput = () => { question.other[i] = other.value; if (!q.multiSelect && other.value.trim()) question.picks[i].clear(); refresh() }
+    other.onkeydown = (e) => { if (e.key === 'Enter' && !send.disabled) { e.preventDefault(); answerQuestion() } }
+    return h('div', { class: 'qq' },
+      h('b', {}, q.header ? h('span', { class: 'chip' }, q.header) : null, q.question, q.multiSelect ? h('small', { class: 'hint' }, ' (plusieurs choix possibles)') : null),
+      h('div', { class: 'opts' }, ...opts), other)
+  })
+  send.onclick = () => answerQuestion()
+  box.replaceChildren(
+    h('div', { class: 'qh' }, '❓ Claude te pose une question', h('span', { class: 'r hint' }, 'Il attend ta réponse pour continuer')),
+    ...parts,
+    h('div', { class: 'qa' },
+      h('button', { title: 'La question s\'affiche dans le terminal de Claude Code, tu y réponds là-bas', onclick: () => { event({ type: 'question.terminal', id: question.id }); question = null; renderQuestion() } }, '↩ Répondre dans le terminal'),
+      send))
+  refresh()
+}
+function answerQuestion() {
+  if (!question) return
+  event({ type: 'question.answer', id: question.id, answers: questionAnswers() })
+  toast('✅ Réponse envoyée à Claude')
+  question = null
+  renderQuestion()
 }
 
 // ---------- 📊 Claude Status : session, contexte, limites, coûts ----------
@@ -2424,7 +2584,7 @@ function renderDash() {
         left !== null ? h('div', { class: 'sub' }, `Réinitialisation dans ${fmtDur(left)} · ${fmtDate(l.resetsAt)}`) : null,
         h('div', { class: 'sub' },
           elapsed !== null ? `${Math.round(elapsed * 100)} % de la fenêtre écoulée ` : '',
-          proj !== null ? (proj >= 100 ? pill('bad', `⚠ à ce rythme, limite atteinte avant la réinitialisation`) : proj >= 80 ? pill('warn', `à ce rythme : ≈ ${Math.round(proj)} % à la fin`) : pill('good', `à ce rythme : ≈ ${Math.round(proj)} % à la fin`)) : ''))
+          proj !== null ? (proj >= 100 ? pill('bad', `⚠ à ce rythme, limite atteinte dans ≈ ${fmtDur(((100 - l.percent) / l.percent) * (len * elapsed))} (vers ${fmtTime(Date.now() + ((100 - l.percent) / l.percent) * (len * elapsed))})`) : proj >= 80 ? pill('warn', `à ce rythme : ≈ ${Math.round(proj)} % à la fin`) : pill('good', `à ce rythme : ≈ ${Math.round(proj)} % à la fin`)) : ''))
     }) : note('Aucune limite remontée : compte API, ou pas encore de réponse de Claude dans cette session.'))
 
   // coût de la session
@@ -2770,6 +2930,10 @@ require(['vs/editor/editor.main'], async () => {
     if (atEnd !== conv.follow) { conv.follow = atEnd; $('convFollow').classList.toggle('on', atEnd) }
   })
   applyConvTools()
+  $('convBigger').onclick = () => stepConvFont(1)
+  $('convSmaller').onclick = () => stepConvFont(-1)
+  $('convSize').onclick = () => stepConvFont(0)
+  $('convArtsBtn').onclick = () => { P.convArts = !P.convArts; renderConvArts(); savePrefs() }
   $('keysClose').onclick = () => closeKeys()
   $('keysEdit').onclick = () => { closeKeys(); openSettings('keys') }
   $('keys').addEventListener('mousedown', (e) => { if (e.target === $('keys')) closeKeys() })
