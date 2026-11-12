@@ -353,7 +353,7 @@
       <div id="pendingBar" hidden></div>
       <div id="queue"></div>
       <div id="promptRow"><div id="promptEd"></div>
-        <div id="promptSide"><div id="busyNote" hidden></div><button id="promptSend" class="primary" title="Envoyer à Claude (Ctrl+Entrée)">Envoyer</button></div></div>
+        <div id="promptSide"><div id="busyNote" hidden></div><button id="promptSend" class="primary" title="Envoyer à Claude (Ctrl+Entrée)">Envoyer</button><button id="promptCli" title="Mettre le prompt dans la zone de saisie du terminal, sans l'envoyer">⤓ Terminal</button></div></div>
       <div id="promptHint">@ fichier · @fichier:lignes · / commandes et skills · #i idée · Ctrl+L dans le code : joindre la sélection · ↑ ↓ prompts précédents · Ctrl+Entrée : envoyer</div>
     </div>
   </main>
@@ -1378,6 +1378,16 @@ function sendPrompt() {
   P.draft = ''
   savePrefs()
 }
+/** Le prompt va dans la zone de saisie du terminal, sans partir : on le relit ou le complète là-bas. */
+function promptToCli() {
+  const text = promptEd.getValue().trim()
+  if (!text) return toast('Le prompt est vide')
+  event({ type: 'prompt.fill', text })
+  promptEd.setValue('')
+  hIdx = -1
+  P.draft = ''
+  savePrefs()
+}
 function historyStep(dir) {
   const list = (srv.project && srv.project.prompts) || []
   if (!list.length) return false
@@ -1514,6 +1524,7 @@ const KEYMAP = [
   // sur Mac, Chrome garde souvent ⌘L pour sa barre d'adresse : ⌃L d'abord
   ['code.prompt', 'Prompt et commandes', 'Mentionner la sélection dans le prompt', MAC ? ['Ctrl+L', 'Mod+L'] : ['Mod+L']],
   ['code.idea', 'Prompt et commandes', 'Nouvelle idée depuis la sélection', [`${LK}+I`]],
+  ['prompt.toCli', 'Prompt et commandes', 'Mettre le prompt dans le terminal, sans l\'envoyer', ['Mod+Alt+Enter']],
   ['run.again', 'Prompt et commandes', 'Relancer la dernière commande', [`${LK}+E`]],
   ['run.stop', 'Prompt et commandes', 'Arrêter la commande', [`${LK}+X`]],
   ['help', 'Aide', 'Liste des raccourcis', ['?', `${LK}+H`]],
@@ -1725,6 +1736,7 @@ function runShortcut(id) {
       if (!ed) return false
       return ed.trigger('kb', id === 'code.prompt' ? 'mi.prompt' : 'mi.idea', null)
     }
+    case 'prompt.toCli': return promptToCli()
     case 'run.again': {
       const r = view.kind === 'run' ? runs.get(view.id) : lastRun()
       if (!r) return toast('Aucune commande lancée pour l\'instant')
@@ -1812,6 +1824,8 @@ function updatePromptHint() {
   for (const el of document.querySelectorAll('.qoKey2')) el.textContent = qo || '🔎 Ouvrir'
   for (const el of document.querySelectorAll('.lKey')) el.textContent = firstKey('code.prompt') || '✍'
   $('promptSend').title = `Envoyer à Claude (${fmtCombo('Mod+Enter')})`
+  const cli = firstKey('prompt.toCli')
+  $('promptCli').title = `Mettre le prompt dans la zone de saisie du terminal, sans l'envoyer${cli ? ` (${cli})` : ''}`
   const k = firstKey('code.prompt')
   $('promptHint').textContent = `@ fichier · @fichier:lignes · / commandes et skills · #i idée${k ? ` · ${k} dans le code : mentionner la sélection` : ''} · ↑ ↓ prompts précédents · ${fmtCombo('Mod+Enter')} : envoyer · ${firstKey('help') || '?'} : raccourcis`
 }
@@ -2023,6 +2037,8 @@ function connect() {
     const ev = JSON.parse(m.data)
     if (ev.type === 'state') return refreshState()
     if (ev.type === 'toast') return toast(ev.text)
+    // le terminal n'a pas pu prendre le prompt : il revient dans l'éditeur
+    if (ev.type === 'promptBack') { if (!promptEd.getValue().trim()) promptEd.setValue(ev.text || ''); return }
     if (ev.type === 'run') {
       if (ev.phase === 'out') {
         const r = runs.get(ev.id)
@@ -2289,6 +2305,7 @@ require(['vs/editor/editor.main'], async () => {
   $('statusline').onclick = () => openSettings('ide')
   $('plan').addEventListener('toggle', () => { if (P.planOpen !== $('plan').open) { P.planOpen = $('plan').open; savePrefs() } })
   $('promptSend').onclick = () => sendPrompt()
+  $('promptCli').onclick = () => promptToCli()
   // hauteur de la zone de prompt
   $('dockSplit').addEventListener('mousedown', (e) => {
     e.preventDefault()

@@ -861,6 +861,24 @@ async function slashCommands($: $) {
  * @fichier et @fichier:12-30 : seulement l'emplacement, Claude lit lui-même ce dont il a besoin.
  * #i3 : l'idée est jointe en entier. /skill : rien à ajouter, le nom suffit à Claude.
  */
+/** #i3 : l'idée n° 3, jointe en entier ; elle passe « en cours ». */
+async function ideaMentions($: $, raw: string) {
+  const context: string[] = []
+  const usedIdeas: string[] = []
+  if (!/(^|\s)#i\d/.test(raw)) return { context, usedIdeas }
+  const cwd = await $.session.cwd()
+  const project = await getProject($)
+  for (const m of raw.matchAll(/(^|\s)#i(\d+)\b/g)) {
+    const idea = project.ideas.find(i => i.n === Number(m[2]))
+    if (!idea || usedIdeas.includes(idea.id)) continue
+    usedIdeas.push(idea.id)
+    context.push(ideaText(cwd, idea))
+  }
+  return { context, usedIdeas }
+}
+const markIdeasDoing = ($: $, ids: string[]) =>
+  ids.length ? changeProject($, p => ({ ...p, ideas: p.ideas.map(i => (ids.includes(i.id) && i.status === 'new' ? { ...i, status: 'doing' } : i)) })) : Promise.resolve()
+
 async function expandMentions($: $, raw: string) {
   const cwd = await $.session.cwd()
   const context: string[] = []
@@ -875,13 +893,9 @@ async function expandMentions($: $, raw: string) {
     if (!files.includes(where)) files.push(where)
   }
   if (files.length) context.push(`Fichiers mentionnés (lis-les si besoin) :\n${files.map(f => `- ${f}`).join('\n')}`)
-  const project = await getProject($)
-  for (const m of raw.matchAll(/(^|\s)#i(\d+)\b/g)) {
-    const idea = project.ideas.find(i => i.n === Number(m[2]))
-    if (!idea || usedIdeas.includes(idea.id)) continue
-    usedIdeas.push(idea.id)
-    context.push(ideaText(cwd, idea))
-  }
+  const ideas = await ideaMentions($, raw)
+  context.push(...ideas.context)
+  usedIdeas.push(...ideas.usedIdeas)
   return { context, usedIdeas }
 }
 
@@ -896,8 +910,7 @@ async function submitPrompt($: $, raw: string) {
     return
   }
   const { context, usedIdeas } = await expandMentions($, text)
-  if (usedIdeas.length)
-    await changeProject($, p => ({ ...p, ideas: p.ideas.map(i => (usedIdeas.includes(i.id) && i.status === 'new' ? { ...i, status: 'doing' } : i)) }))
+  await markIdeasDoing($, usedIdeas)
   // Claude Code ne passe pas un prompt envoyé par la mod dans ses propres hooks prompt.submit :
   // on fait ici ce que ce hook fait pour un prompt tapé (nouveau tour, revue jointe)...
   await ensureRestored($).catch(() => null)
@@ -1165,6 +1178,24 @@ async function onWebEvent($: $, ev: WebEvent) {
       await notify($, { type: 'toast', text: '📎 Sortie de la commande ajoutée : elle partira avec ton prochain prompt' })
       break
     // --- éditeur de prompt ---
+    case 'prompt.fill': {
+      // le prompt va dans la zone de saisie du terminal, sans partir ; un brouillon déjà tapé y reste
+      const text = ev.text?.trim()
+      if (!text) break
+      await changeProject($, p => ({ ...p, prompts: [...p.prompts.filter(x => x !== text), text].slice(-MAX_PROMPTS) }))
+      const box = await $.prompt.read().catch(() => ({ text: '' }))
+      const draft = box.text ?? ''
+      const r = await $.prompt
+        .fill(draft.trim() ? { text: `${/\s$/.test(draft) ? '' : ' '}${text}`, mode: 'append' } : { text, mode: 'replace' })
+        .catch(() => ({ isFilled: false, refusal: undefined }))
+      if (r.isFilled) await notify($, { type: 'toast', text: '⤓ Prompt placé dans le terminal : relis-le et envoie-le de là-bas' })
+      else {
+        const why = r.refusal === 'dialog' ? ' (une fenêtre de Claude Code est ouverte)' : ''
+        await notify($, { type: 'toast', text: `⚠️ Le terminal n'a pas pu prendre le prompt${why} : il revient dans l'éditeur` })
+        await notify($, { type: 'promptBack', text })
+      }
+      break
+    }
     case 'prompt.send':
       if (!ev.text?.trim()) return
       if (await read($, busyAtom)) {
@@ -1511,9 +1542,13 @@ export const register: Register = on => {
       await update($, reviewAtom, () => [])
       void notify($, { type: 'toast', text: '📨 Review jointe à ton prompt' })
     }
+    // un prompt préparé dans la page puis envoyé du terminal : ses #i3 y sont joints aussi
+    const ideas = await ideaMentions($, e.text).catch(() => ({ context: [] as string[], usedIdeas: [] as string[] }))
+    await markIdeasDoing($, ideas.usedIdeas)
     void pushChanges($).catch(() => undefined)
     void persist($)
-    return block ? next({ ...e, context: [...(e.context ?? []), block] }) : next(e)
+    const extra = [...ideas.context, ...(block ? [block] : [])]
+    return extra.length ? next({ ...e, context: [...(e.context ?? []), ...extra] }) : next(e)
   })
 
   on('tool.call', { tool: 'Edit' }, async ($, e, next) => track($, e.file_path, { agent: await agentLabel($, e.agentId) }, () => next(e)))

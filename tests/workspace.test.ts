@@ -173,3 +173,40 @@ test('« Soumettre la revue » envoie les points en attente sans prompt à écri
   expect(text).not.toContain('l2\nl3')
   expect(text).not.toContain('code-rejeté')
 })
+
+test('« ⤓ Terminal » met le prompt dans la zone de saisie du terminal sans l’envoyer ; envoyé de là, ses #i suivent', async ($, on) => {
+  const w = workspace(on)
+  on('http.fetch', () => ({ value: { status: 200, ok: true, headers: {}, text: '{}' } }))
+  on('prompt.read', () => ({ value: { text: 'déjà là', cursor: 7 } }))
+  const filled: { text: string; mode?: string }[] = []
+  let done = () => {}
+  const isFilled = new Promise<void>(r => (done = r))
+  on('prompt.fill', (_$, e) => (filled.push({ text: e.text, mode: e.mode }), done(), { isFilled: true, text: e.text, cursor: 0 }))
+  const sent: { text: string; context: readonly string[] }[] = []
+  on('prompt.submit', (_$, e) => (sent.push({ text: e.text, context: e.context ?? [] }), { text: e.text }))
+  on('state.get', ($, e, next) =>
+    (e as unknown as { key: string }).key === 'web' && !('web' in w.state)
+      ? { value: { value: { shape: 'web-1', value: { port: 61077, token: 'cle' } }, version: 1 } }
+      : next(e),
+  )
+  let stop = () => {}
+  const alive = new Promise<void>(r => (stop = r))
+  on('process.spawn', async function* () {
+    yield { stream: 'stdout' as const, text: '{"port":61077}\n' }
+    yield { stream: 'stdout' as const, text: JSON.stringify({ event: { type: 'prompt.fill', text: 'regarde #i1' } }) + '\n' }
+    await alive
+    return { value: { code: 0, signal: null } }
+  })
+
+  await $.tool.call({ tool: `${T}idea_add`, text: 'Gérer le cache' } as never)
+  await isFilled
+  stop()
+  // le brouillon du terminal est gardé, le prompt vient après ; rien n'est parti
+  expect(filled).toEqual([{ text: ' regarde #i1', mode: 'append' }])
+  expect(sent).toEqual([])
+
+  // la personne l'envoie depuis le terminal : l'idée est jointe et passe « en cours »
+  await $.prompt.submit({ text: 'déjà là regarde #i1' } as never)
+  expect(sent[0]!.context.join('\n')).toContain('Idée #i1 de la boîte à idées : Gérer le cache')
+  expect(w.project()!.ideas[0]!.status).toBe('doing')
+})

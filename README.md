@@ -62,6 +62,7 @@ On peut passer de l'une à l'autre : la touche `w` du panneau ouvre la page web 
   - `/commande` : en tête de prompt, la commande ou le skill est lancé comme dans le terminal ; ailleurs, le nom suffit à Claude
   - `#i3` : l'idée n° 3 de la boîte à idées est jointe en entier et passe « en cours »
 - `Ctrl+Entrée` envoie ; `↑` et `↓` rappellent les prompts déjà envoyés ; le brouillon est gardé
+- **⤓ Terminal** (`Mod+Alt+Entrée`) : le prompt va dans la zone de saisie de Claude Code, sans partir. Tu le relis ou le complètes dans le terminal, puis tu l'envoies de là ; un brouillon déjà tapé dans le terminal est gardé, le prompt s'ajoute après. Les idées `#i3` qu'il mentionne sont jointes à l'envoi, comme depuis la page
 - **File d'attente** : un prompt envoyé pendant que Claude travaille attend son tour et part quand Claude a fini. On peut le retirer, le reprendre dans l'éditeur ou l'envoyer tout de suite
 - **Plan de Claude** en direct, au-dessus de l'éditeur : sa liste de tâches, l'étape en cours, la progression
 
@@ -131,6 +132,7 @@ Ci-dessous, `Mod` est `Cmd` sur macOS et `Ctrl` ailleurs. Les raccourcis à lett
 | `Alt+E` · macOS `⌃E` | Relancer la dernière commande |
 | `Alt+X` · macOS `⌃X` | Arrêter la commande |
 | `Mod+Entrée` | Envoyer le prompt, valider un commentaire |
+| `Mod+Alt+Entrée` | Mettre le prompt dans le terminal, sans l'envoyer |
 | `↑` / `↓` dans le prompt | Prompts précédents |
 
 Un raccourci qui n'a rien à faire là où tu es garde l'effet habituel de la touche : par exemple, `⌃A` hors d'un bloc modifié par Claude ramène en début de ligne. Les raccourcis de revue ne s'appliquent pas pendant que tu écris dans le prompt.
