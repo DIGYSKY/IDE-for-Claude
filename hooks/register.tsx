@@ -923,7 +923,9 @@ async function drainQueue($: $) {
 
 // ---------- outils que Claude peut appeler ----------
 const TOOL_PREFIX = 'mcp__ide-for-claude__'
-const toolText = (text: string, isError = false) => ({ result: { content: [{ type: 'text', text }], isError } })
+// Claude Code attend du texte (pas un objet MCP { content, isError }) ; une erreur part en refus,
+// que Claude lit comme un résultat d'erreur
+const toolText = (text: string, isError = false) => (isError ? { deny: text } : { result: text })
 const TOOLS = [
   {
     name: 'idea_add',

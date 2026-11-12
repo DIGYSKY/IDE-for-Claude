@@ -5,8 +5,13 @@ import type { Annotation, Idea, PlanItem, Queued, SavedCommand } from '../types'
 type On = Parameters<Parameters<typeof test>[1]>[1]
 const PROJECTS = '/home/moi/.claude/plugins/data/ide-for-claude/projects/'
 const T = 'mcp__ide-for-claude__'
-/** le texte que Claude lit en retour d'un outil de la mod */
-const said = (r: unknown) => (r as { result: { content: { text: string }[]; isError: boolean } }).result
+/** ce que Claude lit en retour d'un outil de la mod : du texte, ou un refus en cas d'erreur */
+const said = (r: unknown) => {
+  const x = r as { result?: unknown; deny?: string }
+  // Claude Code n'accepte qu'un texte (ou une liste de blocs) comme résultat d'un outil de plugin
+  if (x.deny === undefined && typeof x.result !== 'string') throw new Error(`résultat d'outil refusé par Claude Code : ${JSON.stringify(x.result)}`)
+  return { text: x.deny ?? (x.result as string), isError: x.deny !== undefined }
+}
 
 
 /** Une session dans /p, un disque en mémoire, et ce que la mod écrit dans son état. */
@@ -45,9 +50,9 @@ test('Claude note une idée, pose une annotation et enregistre une commande', as
   const w = workspace(on, { '/p/src/app.ts': 'un\ndeux\ntrois\n' })
 
   const idea = await $.tool.call({ tool: `${T}idea_add`, text: 'Gérer le cache', file: 'src/app.ts', line: 2 } as never)
-  expect(said(idea).content[0]!.text).toContain('#i1')
+  expect(said(idea).text).toContain('#i1')
   const ann = await $.tool.call({ tool: `${T}annotate`, file: 'src/app.ts', line: 3, note: 'la config est lue ici' } as never)
-  expect(said(ann).content[0]!.text).toContain('src/app.ts:3')
+  expect(said(ann).text).toContain('src/app.ts:3')
   const missing = await $.tool.call({ tool: `${T}annotate`, file: 'nulle/part.ts', line: 1, note: 'x' } as never)
   expect(said(missing).isError).toBe(true)
   await $.tool.call({ tool: `${T}command_save`, name: 'Serveur de dev', command: 'npm run dev' } as never)
@@ -58,7 +63,7 @@ test('Claude note une idée, pose une annotation et enregistre une commande', as
   expect(p.commands.map(c => [c.name, c.command, c.by])).toEqual([['Serveur de dev', 'npm run dev', 'claude']])
 
   const cleared = await $.tool.call({ tool: `${T}annotations_clear` } as never)
-  expect(said(cleared).content[0]!.text).toContain('1 annotation')
+  expect(said(cleared).text).toContain('1 annotation')
   expect(w.project()!.annotations).toEqual([])
 })
 
