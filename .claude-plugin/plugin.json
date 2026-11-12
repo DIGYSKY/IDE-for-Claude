@@ -1,1 +1,12 @@
-{ "name": "ide-for-claude", "version": "0.1.0", "description": "IDE dans un panneau : explorateur, éditeur et diff des modifications de Claude à accepter ou rejeter", "types": "./types/index.d.ts" }
+{
+  "name": "ide-for-claude",
+  "version": "0.1.0",
+  "description": "IDE dans un panneau : explorateur, éditeur et diff des modifications de Claude à accepter ou rejeter",
+  "author": {
+    "name": "DIGYSKY",
+    "url": "https://github.com/DIGYSKY"
+  },
+  "homepage": "https://github.com/DIGYSKY/IDE-for-Claude",
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}
